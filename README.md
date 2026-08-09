@@ -1,4 +1,29 @@
-# Choosing a Programming Language — a 3–4 hour training
+# intelligence-is-compression
+
+**Choosing a Programming Language** — a 3–5 hour training, with a runnable,
+measured benchmark suite behind every claim.
+
+> ### Why this repo is called that
+>
+> The session ends on Grant Sanderson's argument from 3Blue1Brown's
+> [*Compression is Intelligence*](https://www.youtube.com/watch?v=l6DKRf-fAAM):
+> from Shannon, **prediction and compression are mathematically two sides of
+> the same coin** — a good model *is* a good compressor, and extracting
+> structure from experience is what learning *is*.
+>
+> That idea shows up three times here, which is why it names the repo:
+>
+> 1. **The corpus.** `wordfreq` counts word frequencies over 3,000,000 words of
+>    3Blue1Brown narration. Building a frequency table is literally the front
+>    end of every compressor ever written, and where his entropy calculation
+>    starts. ([Block 0b](docs/11-the-data-is-the-workload.md))
+> 2. **The closing note.** Antifragile software — software that gets *stronger*
+>    when attacked — turns out to require keeping the pattern behind ten
+>    thousand attacks instead of the ten thousand records. That is compression,
+>    which is why we cannot build it yet: it is a learning problem wearing an
+>    engineering costume. ([Block 7](docs/08-robust-vs-antifragile.md))
+> 3. **The method.** Every table here compresses a pile of measurements into a
+>    rule you can carry. That is the only thing a training can actually give you.
 
 Teaching materials and a **runnable benchmark suite** for a session on how to
 choose a programming language for a solution.
