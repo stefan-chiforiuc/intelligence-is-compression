@@ -1,0 +1,14 @@
+{
+  "name": "programming-language-tradeoffs-training",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Training materials: how to choose a programming language for a solution",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}

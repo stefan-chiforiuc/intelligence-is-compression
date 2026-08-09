@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "outDir": "build/js",
+    "rootDir": "benchmarks",
+
+    // Every one of these is a *compile-time* setting. None of them appears in
+    // the emitted JavaScript. That is the single most important thing to
+    // understand about TypeScript, and section 2 of the training makes the
+    // class prove it by reading the output.
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "skipLibCheck": true,
+    "types": ["node"],
+    "removeComments": false,
+    "sourceMap": false
+  },
+  "include": ["benchmarks/**/*.ts"],
+  "exclude": ["node_modules", "build", "demos"]
+}

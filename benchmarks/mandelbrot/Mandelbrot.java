@@ -1,0 +1,35 @@
+// CPU-bound workload: count points inside the Mandelbrot set.
+//
+// Pure scalar float math in a tight nested loop. No allocation, no I/O.
+// This isolates *raw interpreter/compiler quality* from everything else.
+public final class Mandelbrot {
+    private static final int MAX_ITER = 50;
+
+    static long mandelbrot(int n) {
+        long inside = 0;
+        double fn = n;
+        for (int y = 0; y < n; y++) {
+            double ci = 2.0 * y / fn - 1.0;
+            for (int x = 0; x < n; x++) {
+                double cr = 2.0 * x / fn - 1.5;
+                double zr = 0.0, zi = 0.0;
+                int i = 0;
+                while (i < MAX_ITER && zr * zr + zi * zi <= 4.0) {
+                    double t = zr * zr - zi * zi + cr;
+                    zi = 2.0 * zr * zi + ci;
+                    zr = t;
+                    i++;
+                }
+                if (i == MAX_ITER) {
+                    inside++;
+                }
+            }
+        }
+        return inside;
+    }
+
+    public static void main(String[] args) {
+        int n = args.length > 0 ? Integer.parseInt(args[0]) : 1000;
+        System.out.println(mandelbrot(n));
+    }
+}

@@ -1,0 +1,48 @@
+Running warm-up curves (60 batches x 200 calls each) ...
+
+  rust ...
+  go ...
+  java ...
+  java-xint ...
+  typescript ...
+  python ...
+
+==============================================================================
+PER-BATCH TIME  (each cell is one batch; taller = slower)
+==============================================================================
+
+Rust      (AOT)  ▂▁▁▂▂▂▂▁▁▁▁▁▁▁▁▁▁▂▁ ▂   ▁▁▁▁     ▁  ▁▂▂▂▂▁▁▁▄▂▃▂▂▂█▂▃▂▂▂▂▂▂▃
+                 first batch      3.0 ms   steady state      3.0 ms   warm-up gain  0.99x
+
+Go        (AOT)  ▂▃▄▂▂▁▂▁▁▁▂ ▁▁▁▁▁▁ ▁   ▁▁ ▃  ▁ ▁▃▄▃█▃▂▁▁▄▅▁▂▁▁▁▂▁▁▁▁▁▁▁▁▂▁▂▂
+                 first batch      3.3 ms   steady state      3.2 ms   warm-up gain  1.02x
+
+Java      (JIT)  █                                                           
+                 first batch      7.7 ms   steady state      3.7 ms   warm-up gain  2.08x
+
+Java -Xint       ▆▇▇▆▆▇▆▆▆▆▆▆█▇▆▆▆▆▅▆▆▆▆▅▅▆▅▆▆▅▆▆▅                           
+                 first batch     48.1 ms   steady state     36.9 ms   warm-up gain  1.30x
+
+TypeScript(JIT)  █                                                           
+                 first batch      7.3 ms   steady state      3.0 ms   warm-up gain  2.45x
+
+Python    (int)  ▅  ▄  ▄ ▁▁▂▁  ▂  ▄ ▁      ▃▃█  ▁▃▃▃▄▁▁ ▂  ▁  ▁   ▁▁ ▂▁▁     
+                 first batch    140.8 ms   steady state    119.5 ms   warm-up gain  1.18x
+
+==============================================================================
+ABSOLUTE COMPARISON (steady state, lower is better)
+==============================================================================
+
+TypeScript(JIT)  █      3.0 ms  (1.0x)
+Rust      (AOT)  █      3.0 ms  (1.0x)
+Go        (AOT)  █      3.2 ms  (1.1x)
+Java      (JIT)  █      3.7 ms  (1.2x)
+Java -Xint       ██████████████     36.9 ms  (12.4x)
+Python    (int)  ████████████████████████████████████████████████    119.5 ms  (40.2x)
+
+Talking points:
+  * A flat line means the code was already optimal on the first run (AOT).
+  * A falling line means the runtime is COMPILING WHILE YOUR USERS WAIT (JIT).
+  * A spike mid-run in Node or Java is usually a deoptimisation.
+  * Compare `java` with `java -Xint` (--xint) to see what the JIT is worth:
+    that gap is roughly the value the JVM adds over pure interpretation.
