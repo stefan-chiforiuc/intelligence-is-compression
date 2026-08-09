@@ -25,9 +25,11 @@ Two results worth pausing on:
 - **Rust and Go are indistinguishable** and effectively at the floor imposed by
   `execve` itself. There is no runtime to initialise.
 
-> These are floors. A real application adds its own imports, DI container,
-> connection pools and config parsing on top — often *far* more than the runtime
-> boot. A Spring Boot app is seconds, not 46 ms. Measure your app, not `Hello`.
+> These are floors, and the floor is not what you ship. **We measured a real
+> Spring Boot app: 3819 ms** — 83× the bare JVM and ~2500× Go — and that app has
+> four endpoints and no security, JPA or messaging. See
+> [Block 4d](12-spring-boot-cold-start-and-pools.md) and run `make demo-spring`.
+> Measure *your* app, not `Hello`.
 
 ---
 

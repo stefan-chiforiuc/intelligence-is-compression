@@ -90,6 +90,7 @@ Facilitator timings, what to cut when you overrun, and expected questions:
 | **4b** When not to parallelise | [`09`](docs/09-when-to-parallelize.md) | `parallelStream` was **16x slower** on 10,000 cheap elements |
 | **4b** Virtual threads | [`09`](docs/09-when-to-parallelize.md) | **15.2x faster** on blocking I/O, **1.02x** on CPU work |
 | **4c** 20-user API race | [`09`](docs/09-when-to-parallelize.md) | **3,874 of 200,000 items lost**, HTTP 204 every time |
+| **4d** Spring Boot | [`12`](docs/12-spring-boot-cold-start-and-pools.md) | cold start **3819 ms**, 83x the bare JVM; `threads.max=10` makes a 100 ms endpoint take **1036 ms** |
 | **5b** Databases | [`10`](docs/10-databases-and-scaling.md) | pool of 200 buys **0.38x throughput for 70x latency**; naive booking **confirmed 400, stored 25** |
 
 ---
@@ -526,6 +527,64 @@ scope exit, even on panic). Measured: **110 ms**, faster than Java's
 the demo uses one global lock, which is the worst design for throughput; and
 Java's `ConcurrentLinkedQueue` was both correct *and* fastest. **The difference
 is the default** — Java's default is a structure that quietly breaks.
+
+---
+
+## Block 4d — Spring Boot: the real cold start and the real thread pool (20 min)
+
+**Run:** `make demo-spring`
+Deep dive: [`docs/12-spring-boot-cold-start-and-pools.md`](docs/12-spring-boot-cold-start-and-pools.md)
+
+**Goal:** every number so far has been a *floor*. This is what a framework costs.
+
+**(8 min) Cold start.** Median of 3, same machine:
+
+| | Cold start | vs Go |
+| --- | ---: | ---: |
+| Go / Rust `hello` | 1.5 ms | 1x |
+| bare JVM `Hello.java` | 46 ms | 31x |
+| **Spring Boot** | **3819 ms** | **~2500x** |
+
+`-XX:TieredStopAtLevel=1` → 3535 ms; lazy init → 3392 ms; `-Xshare:off` →
+3996 ms (proving CDS is already earning its keep).
+
+**83x the bare JVM — and this app is tiny.** Four endpoints, no security, no
+JPA, no Kafka. Real enterprise services are routinely 15–60 s.
+
+> **Ask the room: "what is your app's startup time?"** Almost nobody knows.
+> That is the lesson — a number with direct consequences for deploy duration,
+> autoscaling response, `startupProbe` budgets and whether serverless is even
+> viable, and it goes unmeasured.
+
+**(12 min) The request thread pool.** 100 users x 5 requests to a blocking
+100 ms endpoint:
+
+| Configuration | Throughput | p50 | p99 | Thread |
+| --- | ---: | ---: | ---: | --- |
+| `threads.max=10` | **96 r/s** | **1036 ms** | 1052 ms | platform |
+| `threads.max=50` | 460 r/s | 206 ms | 231 ms | platform |
+| `threads.max=200` (default) | 689 r/s | 113 ms | 163 ms | platform |
+| virtual threads | 719 r/s | 114 ms | **140 ms** | **virtual** |
+
+Four beats:
+
+1. **Little's law predicted the machine.** 10 threads ÷ 0.1 s = 100 r/s
+   predicted, 96 measured. And note p50 = **1036 ms for a 100 ms endpoint** —
+   over 90% is queue time your APM does not show, because most instrumentation
+   starts the clock at the controller.
+2. **Raising it helps because these threads are sleeping.** Run the same sweep
+   against `/cpu` and it flattens at core count. Waiting vs computing, again.
+3. **Virtual threads remove the ceiling** — and the *serving thread* column
+   flips to `virtual`, which is the proof it switched on. But the gain over a
+   tuned 200-thread pool is modest (719 vs 689 r/s). Say that honestly: the win
+   is that you stop guessing the number, not raw throughput.
+4. **Your 200-thread pool was an accidental rate limiter.** It guaranteed you
+   never had >200 requests reaching for a Hikari pool of 10. Remove it without
+   a deliberate limit and the next bottleneck finds out. Show it live:
+   `make db-up && make demo-spring-db` — `/db` reports `connectionWaitMs`.
+
+**Close on the sizing rule:** size from the back forwards — database capacity →
+connection pool → request threads → replicas. Most teams do it backwards.
 
 ---
 

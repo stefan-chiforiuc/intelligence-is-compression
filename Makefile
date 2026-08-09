@@ -40,6 +40,7 @@ help:
 	@echo "    make demo-concurrency block 4  — parallel scaling + data races"
 	@echo "    make demo-parallel-cost block 4b — when NOT to parallelise; virtual threads"
 	@echo "    make demo-api-race    block 4b — 20 users, one shared array, real HTTP"
+	@echo "    make demo-spring      block 4d — Spring Boot cold start + thread pool"
 	@echo "    make demo-db          block 5b — connection pools + transaction races"
 	@echo "                                     (start a real DB first: make db-up)"
 	@echo "    make bench-startup    block 5  — cold starts only (fast)"
@@ -208,6 +209,26 @@ demo-parallel-cost:
 demo-api-race:
 	@bash demos/api-race/run.sh
 
+# --- Block 4d: Spring Boot --------------------------------------------------
+# A real framework, so the room sees what 46 ms of bare JVM turns into.
+# First run downloads Spring dependencies from Maven Central (~25 MB jar).
+.PHONY: demo-spring
+demo-spring:
+	@$(PY) demos/spring-boot/run.py
+
+.PHONY: demo-spring-coldstart
+demo-spring-coldstart:
+	@$(PY) demos/spring-boot/run.py --part 1
+
+.PHONY: demo-spring-pool
+demo-spring-pool:
+	@$(PY) demos/spring-boot/run.py --part 2
+
+# The payoff: virtual threads meet a HikariCP pool of 10. Needs `make db-up`.
+.PHONY: demo-spring-db
+demo-spring-db:
+	@$(PY) demos/spring-boot/run.py --part 2 --path '/db?sleepMs=100'
+
 # --- Block 5b: databases ----------------------------------------------------
 # A deliberately small PostgreSQL: 1 CPU, 512 MB, max_connections=50, so the
 # pool plateau and the connection wall both arrive while the room is watching.
@@ -272,42 +293,45 @@ results.json:
 .PHONY: verify
 verify: setup jvm-langs
 	@echo ""
-	@echo "=== 1/12 benchmark suite (quick) ==============================="
+	@echo "=== 1/13 benchmark suite (quick) ==============================="
 	@$(PY) tools/bench.py --reps 1 --warmup 0 --no-build
 	@echo ""
-	@echo "=== 2/12 typing demo ==========================================="
+	@echo "=== 2/13 typing demo ==========================================="
 	@bash demos/typing/run.sh --fast >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 3/12 jit warm-up demo ======================================"
+	@echo "=== 3/13 jit warm-up demo ======================================"
 	@$(PY) demos/jit-warmup/run.py --langs rust go java >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 4/12 tail-call demo (Java/Scala/Kotlin) ===================="
+	@echo "=== 4/13 tail-call demo (Java/Scala/Kotlin) ===================="
 	@bash demos/tail-calls/run.sh >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 5/12 memory demo ==========================================="
+	@echo "=== 5/13 memory demo ==========================================="
 	@bash demos/stack-heap/objsize/run.sh >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 6/12 gc demo ==============================================="
+	@echo "=== 6/13 gc demo ==============================================="
 	@bash demos/gc/run.sh >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 7/12 parallel scaling demo ================================="
+	@echo "=== 7/13 parallel scaling demo ================================="
 	@$(PY) demos/concurrency/parallel/run.py --size 600 >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 8/12 data race demo ========================================"
+	@echo "=== 8/13 data race demo ========================================"
 	@bash demos/concurrency/races/run.sh >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 9/12 parallelism cost + virtual threads ==================="
+	@echo "=== 9/13 parallelism cost + virtual threads ==================="
 	@mkdir -p build/demos/parcost
 	@javac -d build/demos/parcost demos/java-parallel-cost/*.java $(NOJAVANOISE)
 	@java -cp build/demos/parcost ParallelCost >/dev/null 2>&1 && echo "  ok"
 	@echo ""
-	@echo "=== 10/12 api race (20 users, shared array) ==================="
+	@echo "=== 10/13 api race (20 users, shared array) ==================="
 	@bash demos/api-race/run.sh 8 5 50 >/dev/null 2>&1 && echo "  ok"
 	@echo ""
-	@echo "=== 11/12 database pools + transactions ======================="
+	@echo "=== 11/13 database pools + transactions ======================="
 	@bash demos/db-scaling/run.sh >/dev/null 2>&1 && echo "  ok (real DB or simulation, whichever was reachable)"
 	@echo ""
-	@echo "=== 12/12 carbon estimate ====================================="
+	@echo "=== 12/13 spring boot cold start =============================="
+	@$(PY) demos/spring-boot/run.py --part 1 --reps 1 >/dev/null 2>&1 && echo "  ok" || echo "  SKIPPED (maven/network unavailable)"
+	@echo ""
+	@echo "=== 13/13 carbon estimate ====================================="
 	@$(PY) tools/carbon.py >/dev/null && echo "  ok"
 	@echo ""
 	@echo "All demos ran. You are ready to present."
