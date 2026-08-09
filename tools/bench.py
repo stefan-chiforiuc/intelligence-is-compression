@@ -34,6 +34,8 @@ BUILD = os.path.join(ROOT, "build")
 # Relative on purpose: every child process is spawned with cwd=ROOT, and a
 # relative path keeps the generated report readable on any machine.
 DATA = os.path.join("data", "words.txt")
+# Real English (3Blue1Brown transcripts). Built by tools/get_transcript.py.
+DATA_TRANSCRIPT = os.path.join("data", "transcript.txt")
 
 # Order matters: this is the order columns appear in the report, fastest
 # family first, so the story reads left to right during the session.
@@ -359,6 +361,9 @@ def main() -> None:
     ap.add_argument("--no-build", action="store_true", help="skip building")
     ap.add_argument("--json", help="write raw results here")
     ap.add_argument("--md", help="write a Markdown report here")
+    ap.add_argument("--corpus", choices=["synthetic", "transcript"], default="synthetic",
+                    help="wordfreq input: invented words (default) or real English "
+                         "from 3Blue1Brown transcripts (build with tools/get_transcript.py)")
     ap.add_argument("--render-only", metavar="JSON",
                     help="re-render the Markdown report from a previous run, measuring nothing")
     args = ap.parse_args()
@@ -377,7 +382,17 @@ def main() -> None:
         if lang not in ALL_LANGS:
             ap.error(f"unknown language {lang!r}; choose from {ALL_LANGS}")
 
-    if "wordfreq" in args.workloads and not os.path.exists(os.path.join(ROOT, DATA)):
+    if args.corpus == "transcript":
+        WORKLOADS["wordfreq"]["default_arg"] = DATA_TRANSCRIPT
+        WORKLOADS["wordfreq"]["blurb"] = ("file I/O, strings, hash map, sort - "
+                                          "REAL English (3Blue1Brown transcripts)")
+        if not os.path.exists(os.path.join(ROOT, DATA_TRANSCRIPT)):
+            print(f"missing {DATA_TRANSCRIPT}. Build it with:")
+            print("  python3 tools/get_transcript.py")
+            sys.exit(1)
+
+    if "wordfreq" in args.workloads and args.corpus == "synthetic" \
+            and not os.path.exists(os.path.join(ROOT, DATA)):
         print(f"missing {DATA}; generating it now ...")
         subprocess.run([sys.executable, os.path.join(ROOT, "tools", "gen_words.py"), DATA],
                        cwd=ROOT, check=True)

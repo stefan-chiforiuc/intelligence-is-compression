@@ -31,6 +31,7 @@ help:
 	@echo "    make verify         smoke-test every demo end to end"
 	@echo ""
 	@echo "  During the session (one per block):"
+	@echo "    make bench-corpus     block 0b — same benchmark, two corpora"
 	@echo "    make demo-typing      block 1  — static/dynamic, strong/weak, erasure"
 	@echo "    make demo-jit         block 2  — AOT vs JIT warm-up curves"
 	@echo "    make demo-tailcalls   block 2b — Java vs Scala vs Kotlin, TCO"
@@ -87,6 +88,16 @@ $(DATA):
 .PHONY: data
 data: $(DATA)
 
+# Real English: 154 3Blue1Brown transcripts, same 3,000,000 words as the
+# synthetic corpus so the two are directly comparable. Needs network once.
+# Add your own text (e.g. the 2026 "Compression is Intelligence" transcript):
+#   python3 tools/get_transcript.py --extra path/to/transcript.txt
+data/transcript.txt:
+	@$(PY) tools/get_transcript.py
+
+.PHONY: transcript
+transcript: data/transcript.txt
+
 # --------------------------------------------------------------------------
 .PHONY: build
 build: node_modules
@@ -109,6 +120,25 @@ bench-startup:
 .PHONY: bench-cpu
 bench-cpu:
 	@$(PY) tools/bench.py --workloads mandelbrot --reps 5
+
+# Block 0b: the same benchmark on two different corpora. Same 3,000,000 words;
+# only the vocabulary differs (50,000 invented vs 10,469 real English).
+.PHONY: bench-corpus
+bench-corpus: $(DATA) data/transcript.txt
+	@echo ""
+	@echo "=============================================================="
+	@echo "A. SYNTHETIC corpus - 50,000 invented words, 3,000,000 tokens"
+	@echo "=============================================================="
+	@$(PY) tools/bench.py --workloads wordfreq --reps 5 --warmup 1 --no-build --corpus synthetic
+	@echo ""
+	@echo "=============================================================="
+	@echo "B. REAL ENGLISH - 10,469 distinct words, 3,000,000 tokens"
+	@echo "   (154 3Blue1Brown transcripts)"
+	@echo "=============================================================="
+	@$(PY) tools/bench.py --workloads wordfreq --reps 5 --warmup 1 --no-build --corpus transcript
+	@echo ""
+	@echo "Same programs. Same word count. Only the vocabulary changed."
+	@echo "See docs/11-the-data-is-the-workload.md"
 
 # --------------------------------------------------------------------------
 .PHONY: demo-typing

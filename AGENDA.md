@@ -141,6 +141,42 @@ The four surprises that carry the session:
 
 ---
 
+## Block 0b — The data is part of the workload (5 min, optional)
+
+**Run:** `make transcript` once beforehand, then `make bench-corpus`
+Deep dive: [`docs/11-the-data-is-the-workload.md`](docs/11-the-data-is-the-workload.md)
+
+The sharpest methodology point in the session: turn the benchmark on itself.
+Same `wordfreq` program, same **3,000,000 words**, two different vocabularies —
+50,000 invented strings vs 10,469 real English words from 154 **3Blue1Brown**
+transcripts.
+
+| Language | Synthetic | Real English | Gain |
+| --- | ---: | ---: | ---: |
+| Rust | 168 ms | 126 ms | 1.33× |
+| Go | 378 ms | 322 ms | 1.17× |
+| Java | 660 ms | **436 ms** | **1.51×** |
+| Python | 644 ms | 486 ms | 1.32× |
+| TypeScript | 1100 ms | 905 ms | 1.22× |
+
+Three beats:
+1. **Everything got faster** on the same amount of text — fewer distinct keys,
+   smaller hash map, better cache locality.
+2. **The gains are unequal**, so the gaps move. "X is N× faster at text
+   processing" is incomplete until you say *on what text*.
+3. **Third and fourth place swap.** Python ties/beats Java on the synthetic
+   corpus; Java clearly wins on real English.
+
+> If a change of dataset reorders your benchmark, a benchmark without its
+> dataset is not a result — it is an anecdote with numbers attached.
+
+Callback to set up now and pay off in Block 7: counting how often each word
+occurs **is the front end of every compressor ever written**, and the corpus is
+Grant Sanderson narrating — the same person whose "Compression is Intelligence"
+argument closes the session.
+
+---
+
 ## Block 1 — Types (25–30 min)
 
 **Run:** `make demo-typing`
