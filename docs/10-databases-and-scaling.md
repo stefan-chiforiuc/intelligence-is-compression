@@ -1,7 +1,14 @@
 # Block 5b — Databases: pools, connections, transactions
 
-**Run:** `make demo-db`
+**Run:** `make demo-db` (uses a real PostgreSQL if one is reachable)
+**Start one:** `make db-up` — a resource-limited container: **1 CPU, 512 MB,
+`max_connections=50`**
 **Live on Cloud SQL:** [`demos/db-scaling/GCP-RUNBOOK.md`](../demos/db-scaling/GCP-RUNBOOK.md)
+
+> **Two versions of every demo.** `make demo-db` prefers a real PostgreSQL and
+> falls back to a simulation, saying so loudly. Use the real one — the
+> container is deliberately small so the walls arrive while the room is
+> watching, and "we measured it" beats "we modelled it" every time.
 
 Almost every service in the room's future is **I/O-bound on a database**. That
 makes this block the one where the session's earlier conclusions actually get
@@ -22,6 +29,31 @@ Juniors picture a connection as a socket. It is much more than that:
 | **Auth** | round trips, sometimes an external IdP call |
 
 Typical `max_connections` on a small managed instance is **~100**. Not 10,000.
+Our training container ships with **50**, which is not unrealistic: a Cloud SQL
+`db-f1-micro` defaults to about 25.
+
+### Measured: walking into the wall
+
+`python3 demos/db-scaling/exhaust_connections.py` opens connections one at a
+time against `max_connections=50`:
+
+```
+   50 connections open
+
+FAILED on connection #51 after 0.4s
+  FATAL:  sorry, too many clients already
+
+Could not open a connection to inspect the server:
+  FATAL:  sorry, too many clients already
+  ^ your metrics agent, your health check and your on-call engineer's psql
+    are all locked out at exactly the moment you need them.
+```
+
+That second failure is the part worth pausing on. The database did not get
+slower — it stopped accepting anyone, **including the people trying to
+diagnose it**. And it fails in the worst possible order: connections are
+first-come-first-served, so the pods that get starved are the **new** ones your
+autoscaler just started. Scaling up makes it worse. That is the incident.
 
 That single fact drives the whole block:
 
@@ -37,8 +69,37 @@ The instinct when a service is slow is "increase the pool". It is almost always
 wrong. A pool is a **queue in front of a fixed resource**, and queueing theory
 does not care whether the resource is a disk or a CPU.
 
-Measured with `pool_sizing.py` (a simulated database that can truly run 8
-queries in parallel, 200 concurrent users):
+### Measured on a real 1-CPU PostgreSQL
+
+`python3 demos/db-scaling/real_pool.py` — 40 concurrent users, CPU-bound
+queries, against the 1-CPU container:
+
+| pool size | throughput | p50 | p99 |
+| ---: | ---: | ---: | ---: |
+| **1** | 68 q/s | 588 ms | **620 ms** |
+| 2 | 72 q/s | 542 ms | 635 ms |
+| 4 | 75 q/s | 495 ms | 661 ms |
+| 8 | 70 q/s | 561 ms | 628 ms |
+| 16 | 77 q/s | 481 ms | 693 ms |
+| 32 | 77 q/s | 424 ms | **947 ms** |
+
+**Throughput is flat — a 1.14× spread across a 32× range of pool sizes. A pool
+of ONE reaches 88% of what a pool of 32 achieves.** Meanwhile p99 degrades by
+53%.
+
+That is the whole lesson in one table: past the point where the database is
+saturated, **extra connections buy variance, not capacity**. The HikariCP
+formula `(cores × 2) + spindles` predicts ~2 for a 1-CPU database, and the
+measurement agrees.
+
+Try it live: `docker update --cpus=2 lang-training-db` and re-run. The plateau
+rises. Pool size is a function of the **database's** capacity, never of your
+application's traffic.
+
+### The same shape, simulated
+
+`pool_sizing.py` needs no infrastructure (a simulated database with parallelism
+8, 200 concurrent users) and produces the same shape more dramatically:
 
 | pool size | throughput | p50 | p99 | in-flight |
 | ---: | ---: | ---: | ---: | ---: |
@@ -152,29 +213,52 @@ T2: UPDATE seats SET sold=100    <- T1's booking has vanished
 
 That is the **lost update** anomaly, and it is invisible in every log you have.
 
-### Measured — 16 bookers, 25 attempts each, limit 100
+### Measured on real PostgreSQL — 16 bookers × 12 attempts, limit 100
 
-| strategy | confirmed | sold in DB | ms | verdict |
+`python3 demos/db-scaling/real_transactions.py`:
+
+| strategy | confirmed | stored | ms | verdict |
 | --- | ---: | ---: | ---: | --- |
-| 1. read-then-write, no txn | **400** | **25** | 379 | told 400 users yes, stored 25 |
-| 2. `BEGIN` (deferred) txn | 34 | 34 | 145 | still broken |
-| 3. `BEGIN IMMEDIATE` / `FOR UPDATE` | 100 | 100 | 738 | correct |
-| 4. optimistic (version column) | 100 | 100 | 257 | correct |
-| 5. single atomic `UPDATE` | 100 | 100 | **111** | correct, fastest |
+| 1. no transaction | **192** | **13** | 187 | told 192 users yes, stored 13 |
+| 2. txn @ READ COMMITTED | **192** | **13** | 214 | *still* broken |
+| 3. `SELECT … FOR UPDATE` | 100 | 100 | 681 | correct |
+| 4. optimistic (version) | 100 | 100 | 706 | correct |
+| 5. single atomic `UPDATE` | 100 | 100 | **165** | correct, fastest |
+| 6. REPEATABLE READ + retry | 100 | 100 | 1033 | correct (**787** serialization failures absorbed) |
+| 7. count-then-`INSERT` | 113 | 113 | 154 | **OVERSOLD by 13** |
+| 8. pre-allocated seat rows | 100 | 100 | 216 | correct |
 
-**Strategy 1 is the catastrophe.** 400 customers hold a receipt for a seat that
-does not exist. No exception. No wrong log line. Monitoring green.
+### One bug, two opposite symptoms
 
-**Strategy 2 shows a transaction alone is not the fix** — and the failure mode
-is engine-specific, which is worth being precise about:
+This is the subtlety worth the most time, because juniors generalise from
+whichever failure they saw first:
 
-- **SQLite** (the demo): the deferred transaction hits write conflicts, so
-  bookings are silently **rejected** and you **undersell**.
-- **PostgreSQL under READ COMMITTED**: you get the classic lost update and
-  **oversell**.
+- **Counter model** (`UPDATE seats SET sold = <the value I read>`) — concurrent
+  writers overwrite each other. Increments are **lost**, so you confirm 192
+  bookings and store 13. You **undersell** while telling customers yes.
+- **Insert model** (`SELECT count(*)` then `INSERT`) — every insert succeeds, so
+  nothing is lost, but the count was already stale. You **oversell**.
 
-Different anomaly, same root cause, both wrong. *"We use transactions"* is not
-an answer to *"is this correct?"*.
+Same root cause — read, think, write, with a window in the middle — and you
+**cannot predict the symptom from the bug**. Both are silent.
+
+Run `transactions.py` (SQLite) alongside: it fails differently again, silently
+*rejecting* bookings. **Never generalise a concurrency lesson from one engine.**
+
+**Strategy 2 is the one that matters.** It is what almost all application code
+does: a transaction, at the default isolation level. It is still wrong. READ
+COMMITTED prevents *dirty* reads; it does not prevent *lost updates*.
+*"We wrap it in a transaction"* is not an answer to *"is this correct?"*.
+
+**Strategy 6 has a hidden cost.** Those 787 serialization failures were aborted
+transactions that our retry loop absorbed. Without the loop they are 500s. You
+swapped silent corruption for visible errors you now have to handle — usually
+the better trade, but a trade.
+
+**Strategy 8 is the punchline.** The seats *exist*, as 100 rows. Booking is
+claiming a row with `FOR UPDATE SKIP LOCKED` (the same pattern production job
+queues use). Overselling is not prevented by careful code — it is
+**arithmetically impossible**, because there is no 101st row.
 
 ### The four fixes and when to use each
 

@@ -1,9 +1,17 @@
 # Live on GCP: showing this against a real Cloud SQL instance
 
-The two local demos (`pool_sizing.py`, `transactions.py`) prove the *shape* of
-the problem with no infrastructure. This runbook reproduces the same results on
-real Cloud SQL for PostgreSQL, which is far more convincing to an audience that
-has just been told "this is a simulation".
+> **Try the local container first.** `make db-up` starts a deliberately small
+> PostgreSQL (1 CPU, 512 MB, `max_connections=50`) and `make demo-db` runs
+> every demo below against it — the connection wall, the pool plateau and both
+> transaction anomalies — with no cloud account, no cost and no IP allowlisting.
+> That gets you roughly 90% of the value of this runbook in about 30 seconds.
+>
+> Do the **GCP** version when you want the last 10%: a managed instance, a real
+> network, `pg_stat_activity` on a server you did not configure yourself, and
+> the credibility of "this is the same product we run in production".
+
+The local demos prove the *shape* of the problem with no infrastructure. This
+runbook reproduces the same results on real Cloud SQL for PostgreSQL.
 
 > **Do this on a scratch project and a throwaway instance.** You are going to
 > deliberately saturate a database and deliberately corrupt a row. Never point
@@ -138,8 +146,20 @@ simulation's table next to this one on the screen — matching *shapes* from a
 
 ## 4. Demo C — the lost update, in PostgreSQL
 
-The local SQLite demo undersells; PostgreSQL under READ COMMITTED **oversells**,
-which is the more alarming failure and the one worth showing live.
+Two-session `psql` is the most convincing way to show this, because the room
+watches the anomaly happen one statement at a time.
+
+Note which symptom you get — it depends on how the write is expressed, not on
+the engine alone (`real_transactions.py` measures all of these):
+
+  * **counter model** (`UPDATE seats SET sold = <value I read>`) — increments
+    are LOST. Locally this confirmed 192 bookings and stored 13.
+  * **insert model** (`SELECT count(*)` then `INSERT`) — nothing is lost, but
+    the count was stale, so you OVERSELL. Locally: 113 stored against a limit
+    of 100.
+  * **SQLite** fails a third way, silently rejecting writes.
+
+Same root cause every time; you cannot predict the symptom from the bug.
 
 ```sql
 CREATE TABLE seats (id int PRIMARY KEY, sold int NOT NULL, version int NOT NULL DEFAULT 0);

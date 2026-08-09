@@ -44,12 +44,16 @@ make demo-gc          # garbage collectors compared by tail latency
 make demo-concurrency # parallel scaling + data races in all five languages
 make demo-parallel-cost # when NOT to parallelise; virtual threads
 make demo-api-race    # 20 users, one shared array, over real HTTP
+make db-up            # small PostgreSQL container: 1 CPU, 512 MB, 50 connections
 make demo-db          # connection pools + the same race inside a database
+make db-down          # tear it down
 make bench-startup    # cold starts only
 make carbon           # energy and CO2e estimate
 ```
 
 **Requirements:** Python 3.11+, Go 1.21+, Rust 1.70+, Node 20+, JDK 17+.
+The database block additionally wants Docker and `pip install 'psycopg[binary]'`
+— without them it falls back to a simulation and says so.
 Everything else is stdlib. Two steps need the network, both one-off and both
 with fallbacks: `npm install` for TypeScript, and `make jvm-langs`, which pulls
 the Scala and Kotlin compilers straight from Maven Central as plain jars — no
@@ -137,6 +141,7 @@ demos/
   java-parallel-cost/      the crossover point, and virtual threads
   api-race/                20 users + one ArrayList over real HTTP; Rust twin
   db-scaling/              pool sizing, transaction anomalies, GCP runbook
+    docker-compose.yml     resource-limited PostgreSQL for the live demos
 
 docs/
   00-how-to-choose.md      the decision framework (the handout)

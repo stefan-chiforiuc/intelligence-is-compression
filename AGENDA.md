@@ -539,20 +539,47 @@ Deep dives: [`docs/04-cold-start-cloud.md`](docs/04-cold-start-cloud.md),
 
 ## Block 5b — Databases: pools, connections, transactions (30 min)
 
-**Run:** `make demo-db`
+**Run:** `make db-up` then `make demo-db`
+A real PostgreSQL in a deliberately small container — 1 CPU, 512 MB,
+`max_connections=50` — so every wall arrives while the room is watching.
+Falls back to a simulation if Docker is unavailable, and says so.
 Deep dive: [`docs/10-databases-and-scaling.md`](docs/10-databases-and-scaling.md)
 Live on GCP: [`demos/db-scaling/GCP-RUNBOOK.md`](demos/db-scaling/GCP-RUNBOOK.md)
 
 **Goal:** almost every service in the room's future is I/O-bound on a database,
 which is where the language matters least and the architecture matters most.
 
-**(5 min) A connection is not a cheap object.** In PostgreSQL it is a whole OS
-**process** (~5–10 MB). `max_connections` on a small managed instance is ~100 —
-so 10 pods x a pool of 20 = 200 connections against a limit of 100, and the
-service does not degrade, it **fails to connect**.
+**(6 min) The connection wall, live.** `make demo-db` opens connections one at
+a time until PostgreSQL refuses:
 
-**(10 min) Why a bigger pool is slower.** Simulated DB with real parallelism 8,
-200 concurrent users:
+```
+   50 connections open
+FAILED on connection #51:  FATAL:  sorry, too many clients already
+Could not open a connection to inspect the server:  too many clients already
+```
+
+That second line is the moment — the database stopped accepting **everyone**,
+including your metrics agent and your on-call engineer's `psql`. And it starves
+the *newest* pods first, so autoscaling makes it worse.
+
+A connection is not a socket: in PostgreSQL it is a whole OS **process**
+(~5–10 MB). 10 pods × a pool of 20 = 200 against a limit of 100.
+
+**(9 min) Why a bigger pool is slower.** Measured against the 1-CPU container,
+40 concurrent users:
+
+| pool | throughput | p99 |
+| ---: | ---: | ---: |
+| **1** | 68 q/s | **620 ms** |
+| 8 | 70 q/s | 628 ms |
+| 32 | 77 q/s | **947 ms** |
+
+**A pool of ONE gets 88% of the throughput of a pool of 32, and p99 is 53%
+better.** Past saturation, connections buy variance, not capacity. Then
+`docker update --cpus=2 lang-training-db` and re-run — the plateau rises,
+proving pool size follows the *database's* capacity, not your traffic.
+
+The simulation (`make demo-db-sim`) shows the same shape more dramatically:
 
 | pool | throughput | p50 |
 | ---: | ---: | ---: |
@@ -567,18 +594,28 @@ The queue does not vanish when you enlarge the pool — it **moves**, out of you
 app where it is visible and sheddable, into the database where it is not.
 Formula: `connections = (cores * 2) + spindles` → ~17 for an 8-core DB, not 200.
 
-**(12 min) The same race, one layer down.** 16 bookers, seat limit 100:
+**(12 min) The same race, one layer down.** 16 bookers, limit 100, real PG:
 
 | strategy | confirmed | stored | verdict |
 | --- | ---: | ---: | --- |
-| read-then-write, no txn | **400** | **25** | told 400 users yes, stored 25 |
-| `BEGIN` (deferred) txn | 34 | 34 | a transaction alone is not the fix |
-| `FOR UPDATE` / `BEGIN IMMEDIATE` | 100 | 100 | pessimistic |
-| optimistic (version column) | 100 | 100 | detect + retry |
-| single atomic `UPDATE` | 100 | 100 | **fastest, and the right answer** |
+| 1. no transaction | **192** | **13** | told 192 users yes, stored 13 |
+| 2. txn @ READ COMMITTED | **192** | **13** | *still* wrong |
+| 3. `SELECT … FOR UPDATE` | 100 | 100 | pessimistic |
+| 4. optimistic (version) | 100 | 100 | detect + retry |
+| 5. single atomic `UPDATE` | 100 | 100 | fastest |
+| 6. REPEATABLE READ + retry | 100 | 100 | correct — **787** aborts absorbed |
+| 7. count-then-`INSERT` | 113 | 113 | **OVERSOLD by 13** |
+| 8. pre-allocated seat rows | 100 | 100 | **impossible to oversell** |
 
-Be precise about strategy 2: SQLite **undersells** (write conflicts), PostgreSQL
-under READ COMMITTED **oversells** (lost update). Different anomaly, same cause.
+**One bug, two opposite symptoms.** The counter model *loses* increments and
+undersells; the insert model keeps every row but checks a stale count and
+oversells. You cannot predict the symptom from the bug — and SQLite fails a
+third way. Never generalise a concurrency lesson from one engine.
+
+Strategy 2 is the one that matters: a transaction at the default isolation
+level, which is what nearly all application code does, and it is still wrong.
+Strategy 8 is the punchline: the seats *exist* as 100 rows, so there is no
+101st row to claim.
 
 **(3 min) Land the through-line.** We have now hit the *same* bug at four
 layers — a type error, `counter++`, an `ArrayList` in a handler, a database row.

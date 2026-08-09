@@ -40,6 +40,7 @@ help:
 	@echo "    make demo-parallel-cost block 4b — when NOT to parallelise; virtual threads"
 	@echo "    make demo-api-race    block 4b — 20 users, one shared array, real HTTP"
 	@echo "    make demo-db          block 5b — connection pools + transaction races"
+	@echo "                                     (start a real DB first: make db-up)"
 	@echo "    make bench-startup    block 5  — cold starts only (fast)"
 	@echo "    make carbon           block 6  — energy and CO2e estimate"
 	@echo ""
@@ -178,16 +179,52 @@ demo-api-race:
 	@bash demos/api-race/run.sh
 
 # --- Block 5b: databases ----------------------------------------------------
+# A deliberately small PostgreSQL: 1 CPU, 512 MB, max_connections=50, so the
+# pool plateau and the connection wall both arrive while the room is watching.
+.PHONY: db-up
+db-up:
+	@bash demos/db-scaling/db.sh up
+
+.PHONY: db-down
+db-down:
+	@bash demos/db-scaling/db.sh down
+
+.PHONY: db-status
+db-status:
+	@bash demos/db-scaling/db.sh status
+
+.PHONY: db-psql
+db-psql:
+	@bash demos/db-scaling/db.sh psql
+
+# Uses the real database if one is reachable; otherwise falls back to the
+# simulation and says so.
 .PHONY: demo-db
 demo-db:
 	@bash demos/db-scaling/run.sh
 
+.PHONY: demo-db-sim
+demo-db-sim:
+	@bash demos/db-scaling/run.sh --sim
+
+.PHONY: demo-db-wall
+demo-db-wall:
+	@$(PY) demos/db-scaling/exhaust_connections.py
+
 .PHONY: demo-db-pool
 demo-db-pool:
-	@$(PY) demos/db-scaling/pool_sizing.py
+	@$(PY) demos/db-scaling/real_pool.py
 
 .PHONY: demo-db-txn
 demo-db-txn:
+	@$(PY) demos/db-scaling/real_transactions.py
+
+.PHONY: demo-db-pool-sim
+demo-db-pool-sim:
+	@$(PY) demos/db-scaling/pool_sizing.py
+
+.PHONY: demo-db-txn-sim
+demo-db-txn-sim:
 	@$(PY) demos/db-scaling/transactions.py
 
 .PHONY: carbon
@@ -238,7 +275,7 @@ verify: setup jvm-langs
 	@bash demos/api-race/run.sh 8 5 50 >/dev/null 2>&1 && echo "  ok"
 	@echo ""
 	@echo "=== 11/12 database pools + transactions ======================="
-	@bash demos/db-scaling/run.sh >/dev/null 2>&1 && echo "  ok"
+	@bash demos/db-scaling/run.sh >/dev/null 2>&1 && echo "  ok (real DB or simulation, whichever was reachable)"
 	@echo ""
 	@echo "=== 12/12 carbon estimate ====================================="
 	@$(PY) tools/carbon.py >/dev/null && echo "  ok"

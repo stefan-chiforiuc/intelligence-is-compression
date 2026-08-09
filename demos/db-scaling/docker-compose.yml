@@ -1,0 +1,80 @@
+# A deliberately SMALL PostgreSQL, so the walls arrive while the room is watching.
+#
+#   docker compose -f demos/db-scaling/docker-compose.yml up -d
+#   bash demos/db-scaling/db.sh status
+#
+# Every limit below is chosen for teaching, not for production:
+#
+#   cpus: 1.0          one core, so the pool knee lands at ~2-4 connections
+#                      instead of somewhere off the right of the table
+#   memory: 512M       small enough that connection memory is visible
+#   max_connections:50 low enough to exhaust live in ten seconds. Managed
+#                      instances really do ship with limits in this range:
+#                      a db-f1-micro Cloud SQL instance defaults to ~25.
+#
+# Real production values would be very different. The POINT is that every one
+# of these numbers exists on your real database too - most teams just have
+# never looked them up.
+
+services:
+  trainingdb:
+    image: postgres:16-alpine
+    container_name: lang-training-db
+    environment:
+      POSTGRES_USER: training
+      POSTGRES_PASSWORD: training
+      POSTGRES_DB: training
+      # Speed up startup; this database is disposable by design.
+      POSTGRES_INITDB_ARGS: "--data-checksums=off"
+    command:
+      - postgres
+      - -c
+      - max_connections=50
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - max_worker_processes=2
+      - -c
+      - max_parallel_workers=2
+      # Parallel query would let one connection use several cores and muddy
+      # the "the database has N cores" story. Off, deliberately.
+      - -c
+      - max_parallel_workers_per_gather=0
+      # Log slow statements so `docker logs` is useful during the demo.
+      - -c
+      - log_min_duration_statement=200
+      - -c
+      - log_connections=on
+      - -c
+      - log_disconnections=on
+    ports:
+      - "55432:5432"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U training -d training"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    # No volume on purpose: `down` should leave nothing behind.
+    tmpfs:
+      - /var/lib/postgresql/data
+
+# NOTE ON `deploy.resources` WITH PLAIN `docker compose`
+# On Compose v2 these limits ARE applied for `docker compose up` (they are only
+# ignored by the very old docker-compose v1 python client outside Swarm).
+# Verify with:  docker stats --no-stream lang-training-db
+# If your Compose ignores them, run the container directly instead:
+#
+#   docker run -d --name lang-training-db \
+#     --cpus=1.0 --memory=512m \
+#     -e POSTGRES_USER=training -e POSTGRES_PASSWORD=training \
+#     -e POSTGRES_DB=training -p 55432:5432 \
+#     postgres:16-alpine \
+#     -c max_connections=50 -c shared_buffers=128MB \
+#     -c max_parallel_workers_per_gather=0
