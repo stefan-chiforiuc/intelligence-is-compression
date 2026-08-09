@@ -1,10 +1,11 @@
-# Choosing a Programming Language — a 3-hour training
+# Choosing a Programming Language — a 3–4 hour training
 
 Teaching materials and a **runnable benchmark suite** for a session on how to
 choose a programming language for a solution.
 
 The same four programs are implemented in **Python, Go, Rust, TypeScript and
-Java**, measured on your own hardware, and used to argue one point:
+Java** (plus **Scala** and **Kotlin** for the tail-call block), measured on your
+own hardware, and used to argue one point:
 
 > There is no fastest language. There are only workloads, and each language is
 > a different bet about which resource is scarce.
@@ -15,7 +16,7 @@ Java**, measured on your own hardware, and used to argue one point:
 
 | You want to | Read |
 | --- | --- |
-| Run the session | **[AGENDA.md](AGENDA.md)** — 3-hour plan, block by block |
+| Run the session | **[AGENDA.md](AGENDA.md)** — block-by-block plan, in a 3:00 and a 4:00 variant |
 | Prepare to teach it | [docs/FACILITATOR-NOTES.md](docs/FACILITATOR-NOTES.md) |
 | Just the takeaway | [docs/00-how-to-choose.md](docs/00-how-to-choose.md) |
 | See the numbers | [docs/RESULTS.md](docs/RESULTS.md) |
@@ -25,26 +26,31 @@ Java**, measured on your own hardware, and used to argue one point:
 ## Quick start
 
 ```bash
-make doctor    # check Python, Go, Rust, Node and Java are installed
-make setup     # install deps, generate the benchmark corpus  (~2 min)
-make bench     # run the suite, write docs/RESULTS.md         (~2 min)
-make verify    # smoke-test every demo end to end             (~5 min)
+make doctor      # check Python, Go, Rust, Node and Java are installed
+make setup       # install deps, generate the benchmark corpus  (~2 min)
+make jvm-langs   # fetch standalone Scala + Kotlin compilers    (~110 MB, once)
+make bench       # run the suite, write docs/RESULTS.md         (~2 min)
+make verify      # smoke-test all nine demos end to end         (~8 min)
 ```
 
 Then run any block on its own:
 
 ```bash
-make demo-typing    # static/dynamic, strong/weak, and type erasure
-make demo-jit       # AOT vs JIT warm-up curves
-make demo-memory    # stack vs heap, and what an object really costs
-make demo-gc        # garbage collectors compared by tail latency
-make bench-startup  # cold starts only
-make carbon         # energy and CO2e estimate
+make demo-typing      # static/dynamic, strong/weak, and type erasure
+make demo-jit         # AOT vs JIT warm-up curves
+make demo-tailcalls   # Java vs Scala vs Kotlin: tail-call optimisation
+make demo-memory      # stack vs heap, and what an object really costs
+make demo-gc          # garbage collectors compared by tail latency
+make demo-concurrency # parallel scaling + data races in all five languages
+make bench-startup    # cold starts only
+make carbon           # energy and CO2e estimate
 ```
 
 **Requirements:** Python 3.11+, Go 1.21+, Rust 1.70+, Node 20+, JDK 17+.
-Everything else is stdlib. The only network dependency is `npm install` for
-TypeScript, and there is a fallback if it is unavailable.
+Everything else is stdlib. Two steps need the network, both one-off and both
+with fallbacks: `npm install` for TypeScript, and `make jvm-langs`, which pulls
+the Scala and Kotlin compilers straight from Maven Central as plain jars — no
+SDKMAN, no Gradle, no coursier.
 
 ---
 
@@ -75,7 +81,7 @@ From a 4-core Xeon @ 2.1 GHz — regenerate with `make bench`:
 | TypeScript | 86 ms | **240 ms** | 1290 ms | 29 ms | 98 MB |
 | Python | 2300 ms | 4350 ms | 895 ms | 11 ms | 20 MB |
 
-Four results that break the usual folklore:
+Six results that break the usual folklore:
 
 - **Python beats Java and TypeScript at `wordfreq`** — the most realistic
   workload — because `str.split` and `Counter` are C. You are benchmarking
@@ -86,13 +92,19 @@ Four results that break the usual folklore:
   JIT knows things an AOT compiler cannot. Its problem is time-to-peak, not peak.
 - **`GOGC=off` is 4.6x slower**, not faster. "Less GC" ≠ "faster" — a compacting
   collector also buys you cache locality.
+- **Python threads scale to 0.94x on 4 cores** while Python *processes* reach
+  2.64x. That flat row is the GIL, and it is the single most surprising result
+  in the concurrency block.
+- **The same function overflows the stack in Java and returns instantly in
+  Scala and Kotlin** — same JVM, same bytecode format. `javap -c` shows why:
+  `invokestatic` versus `goto`.
 
 ---
 
 ## Repository layout
 
 ```
-AGENDA.md                  the 3-hour session plan
+AGENDA.md                  the session plan (3:00 core / 4:00 extended)
 Makefile                   every command you need
 
 benchmarks/                the same 4 programs in 5 languages
@@ -104,9 +116,13 @@ benchmarks/                the same 4 programs in 5 languages
 demos/
   typing/                  strong/weak x static/dynamic, and type erasure
   jit-warmup/              per-batch timing inside one process
+  tail-calls/              Java vs Scala vs Kotlin, proved with javap
   stack-heap/              Go escape analysis, stack limits
     objsize/               measured bytes-per-object in all 5 languages
   gc/                      collectors compared by tail latency
+  concurrency/
+    parallel/              same Mandelbrot kernel fanned out across cores
+    races/                 the same shared counter, five ways to get it wrong
 
 docs/
   00-how-to-choose.md      the decision framework (the handout)
@@ -115,6 +131,9 @@ docs/
   03-memory.md             stack, heap, garbage collection
   04-cold-start-cloud.md   cold starts, containers, Kubernetes
   05-carbon.md             energy and CO2e, and how to be sceptical of it
+  06-concurrency.md        concurrency vs parallelism, GIL, races
+  07-jvm-languages-tail-calls.md   same runtime, different language
+  08-robust-vs-antifragile.md      closing philosophy note
   RESULTS.md               generated by `make bench`
   FACILITATOR-NOTES.md     prep, timing, expected questions
 
@@ -122,6 +141,7 @@ tools/
   bench.py                 the measurement harness
   carbon.py                energy/CO2e estimator with visible assumptions
   gen_words.py             deterministic corpus generator
+  get_jvm_langs.sh         fetches Scala + Kotlin compilers from Maven Central
 ```
 
 ---

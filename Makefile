@@ -31,12 +31,14 @@ help:
 	@echo "    make verify         smoke-test every demo end to end"
 	@echo ""
 	@echo "  During the session (one per block):"
-	@echo "    make demo-typing    block 1 — static/dynamic, strong/weak, erasure"
-	@echo "    make demo-jit       block 2 — AOT vs JIT warm-up curves"
-	@echo "    make demo-memory    block 3 — stack vs heap, object cost"
-	@echo "    make demo-gc        block 3 — collectors and tail latency"
-	@echo "    make bench-startup  block 4 — cold starts only (fast)"
-	@echo "    make carbon         block 5 — energy and CO2e estimate"
+	@echo "    make demo-typing      block 1  — static/dynamic, strong/weak, erasure"
+	@echo "    make demo-jit         block 2  — AOT vs JIT warm-up curves"
+	@echo "    make demo-tailcalls   block 2b — Java vs Scala vs Kotlin, TCO"
+	@echo "    make demo-memory      block 3  — stack vs heap, object cost"
+	@echo "    make demo-gc          block 3  — collectors and tail latency"
+	@echo "    make demo-concurrency block 4  — parallel scaling + data races"
+	@echo "    make bench-startup    block 5  — cold starts only (fast)"
+	@echo "    make carbon           block 6  — energy and CO2e estimate"
 	@echo ""
 	@echo "  Utilities:"
 	@echo "    make doctor         check every toolchain is installed"
@@ -133,6 +135,32 @@ demo-gc:
 demo-gc-log:
 	@bash demos/gc/run.sh --log
 
+# --- Block 2b: tail calls on the JVM ---------------------------------------
+# Standalone Scala + Kotlin compilers, straight from Maven Central. No SDKMAN,
+# no Gradle, no coursier — just jars and `java -cp`.
+build/jvm-langs/env.sh:
+	@bash tools/get_jvm_langs.sh
+
+.PHONY: jvm-langs
+jvm-langs: build/jvm-langs/env.sh
+
+.PHONY: demo-tailcalls
+demo-tailcalls: build/jvm-langs/env.sh
+	@bash demos/tail-calls/run.sh
+
+# --- Block 4: concurrency ---------------------------------------------------
+.PHONY: demo-concurrency
+demo-concurrency:
+	@bash demos/concurrency/run.sh
+
+.PHONY: demo-parallel
+demo-parallel:
+	@python3 demos/concurrency/parallel/run.py
+
+.PHONY: demo-races
+demo-races:
+	@bash demos/concurrency/races/run.sh
+
 .PHONY: carbon
 carbon: results.json
 	@$(PY) tools/carbon.py --requests 50e6
@@ -146,24 +174,33 @@ results.json:
 
 # --------------------------------------------------------------------------
 .PHONY: verify
-verify: setup
+verify: setup jvm-langs
 	@echo ""
-	@echo "=== 1/6 benchmark suite (quick) ==============================="
+	@echo "=== 1/9 benchmark suite (quick) ==============================="
 	@$(PY) tools/bench.py --reps 1 --warmup 0 --no-build
 	@echo ""
-	@echo "=== 2/6 typing demo ==========================================="
+	@echo "=== 2/9 typing demo ==========================================="
 	@bash demos/typing/run.sh --fast >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 3/6 jit warm-up demo ======================================"
+	@echo "=== 3/9 jit warm-up demo ======================================"
 	@$(PY) demos/jit-warmup/run.py --langs rust go java >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 4/6 memory demo ==========================================="
+	@echo "=== 4/9 tail-call demo (Java/Scala/Kotlin) ===================="
+	@bash demos/tail-calls/run.sh >/dev/null && echo "  ok"
+	@echo ""
+	@echo "=== 5/9 memory demo ==========================================="
 	@bash demos/stack-heap/objsize/run.sh >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 5/6 gc demo ==============================================="
+	@echo "=== 6/9 gc demo ==============================================="
 	@bash demos/gc/run.sh >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 6/6 carbon estimate ======================================="
+	@echo "=== 7/9 parallel scaling demo ================================="
+	@$(PY) demos/concurrency/parallel/run.py --size 600 >/dev/null && echo "  ok"
+	@echo ""
+	@echo "=== 8/9 data race demo ========================================"
+	@bash demos/concurrency/races/run.sh >/dev/null && echo "  ok"
+	@echo ""
+	@echo "=== 9/9 carbon estimate ======================================="
 	@$(PY) tools/carbon.py >/dev/null && echo "  ok"
 	@echo ""
 	@echo "All demos ran. You are ready to present."

@@ -1,4 +1,4 @@
-# Choosing a Programming Language — 3-hour training
+# Choosing a Programming Language — training agenda
 
 **Audience:** juniors and students who can already write code in at least one language.
 **Format:** live demos, run from this repo, on the projector. Not slides.
@@ -12,36 +12,71 @@ with numbers, and you will know which arguments are real and which are folklore.
 > There is no fastest language. There are only workloads, and each language is
 > a different bet about which resource is scarce.
 
-Everything in these three hours is evidence for that sentence.
+Everything in this session is evidence for that sentence.
 
 ---
 
-## Timing at a glance
+## ⚠️ Read this before you plan your slot
 
-| Time | Block | Key artefact |
+The material here now runs to roughly **3 hours 40 minutes** if you demo
+everything at a comfortable pace. Two ways to fit it:
+
+| Variant | Length | What you give up |
 | --- | --- | --- |
-| 0:00–0:20 | 0. Setup + the big table | `make bench` |
-| 0:20–0:50 | 1. Types: static/dynamic, strong/weak | `make demo-typing` |
-| 0:50–1:20 | 2. Compilation: AOT, JIT, interpreter | `make demo-jit` |
-| 1:20–1:35 | **Break** | |
-| 1:35–2:10 | 3. Memory: stack, heap, GC | `make demo-memory` `make demo-gc` |
-| 2:10–2:35 | 4. Cold starts and cloud deployment | `make bench-startup` |
-| 2:35–2:50 | 5. Energy and carbon | `make carbon` |
-| 2:50–3:00 | 6. The decision framework | `docs/00-how-to-choose.md` |
+| **A — Core** (below) | 3:00 | Cold start, cloud and carbon are merged into one 20-minute block. You show the tables and skip the Dockerfile/Kubernetes walkthrough. |
+| **B — Extended** | 4:00 | Nothing. Every block gets its natural length and there are two breaks. |
 
-Detailed facilitator timings, scripts and expected questions:
+**Recommendation: if you can get 3.5–4 hours, take it.** Concurrency (Block 4)
+is the block juniors have the least prior exposure to and the one that generates
+the most discussion; squeezing it below 30 minutes wastes it. If you are locked
+to 3 hours, run Variant A exactly as written and *do not* try to smuggle the cut
+material back in — you will overrun and lose the closing framework, which is the
+part they take home.
+
+### Variant A — Core (3:00)
+
+| Time | Block | Command |
+| --- | --- | --- |
+| 0:00–0:15 | 0. Setup + the big table | `make bench` |
+| 0:15–0:40 | 1. Types: static/dynamic, strong/weak | `make demo-typing` |
+| 0:40–1:05 | 2. Compilation: AOT, JIT, interpreter | `make demo-jit` |
+| 1:05–1:15 | 2b. Same JVM, different language: tail calls | `make demo-tailcalls` |
+| 1:15–1:25 | **Break** | |
+| 1:25–1:55 | 3. Memory: stack, heap, GC | `make demo-memory` `make demo-gc` |
+| 1:55–2:25 | 4. Concurrency and parallelism | `make demo-concurrency` |
+| 2:25–2:45 | 5. Cold starts, cloud and carbon *(merged)* | `make bench-startup` `make carbon` |
+| 2:45–2:52 | 6. The decision framework | `docs/00-how-to-choose.md` |
+| 2:52–3:00 | 7. Closing note: robust vs antifragile | `docs/08-robust-vs-antifragile.md` |
+
+### Variant B — Extended (4:00)
+
+| Time | Block |
+| --- | --- |
+| 0:00–0:20 | 0. Setup + the big table |
+| 0:20–0:50 | 1. Types |
+| 0:50–1:20 | 2. Compilation |
+| 1:20–1:35 | 2b. Tail calls: Java vs Scala vs Kotlin |
+| 1:35–1:50 | **Break** |
+| 1:50–2:25 | 3. Memory |
+| 2:25–3:05 | 4. Concurrency and parallelism |
+| 3:05–3:15 | **Break** |
+| 3:15–3:33 | 5. Cold starts and cloud deployment |
+| 3:33–3:45 | 6. Energy and carbon |
+| 3:45–3:52 | 7. The decision framework |
+| 3:52–4:00 | 8. Closing note: robust vs antifragile |
+
+Facilitator timings, what to cut when you overrun, and expected questions:
 **[`docs/FACILITATOR-NOTES.md`](docs/FACILITATOR-NOTES.md)**
 
 ---
 
-## Block 0 — Setup and the big table (0:00–0:20)
+## Block 0 — Setup and the big table (15–20 min)
 
 **Goal:** get a real measurement on screen in the first ten minutes, before any theory.
 
 1. **(2 min)** Open with the question you are banning:
    *"Which language is fastest?"* — write it on the board, then cross it out.
 2. **(3 min)** Kick off `make bench` and leave it running while you talk.
-   It takes about two minutes and prints as it goes.
 3. **(5 min)** While it runs, explain the four workloads and why there are four:
 
    | Workload | What it stresses | Why it is here |
@@ -54,21 +89,11 @@ Detailed facilitator timings, scripts and expected questions:
    All five languages implement the *same algorithm* and the harness verifies
    their output is byte-identical. Say that out loud — it is the difference
    between a benchmark and a rumour.
-4. **(10 min)** Read the table together. Ask the room to spot the surprises
-   *before* you explain them. There are four, and they carry the whole session:
+4. **(5–10 min)** Read the table together. Ask the room to spot the surprises
+   *before* you explain them.
 
-   - **Python beats Java and TypeScript at `wordfreq`.** The 40x-slower
-     language wins a realistic workload, because `str.split` and `Counter` are
-     C code. *Lesson: you are benchmarking libraries as much as languages.*
-   - **Java allocates faster than Rust** at `binarytrees` — and uses **14x the
-     memory** to do it. *Lesson: speed and footprint are different axes.*
-   - **Java's cold start is 30x Rust's.** *Lesson: the same runtime that wins
-     on throughput loses on startup.*
-   - **Python's cold start beats Node's.** *Lesson: nothing here is a single
-     ranking.*
-
-**Reference numbers** (this machine, 4-core Xeon 2.1 GHz — regenerate with
-`make bench`; see [`docs/RESULTS.md`](docs/RESULTS.md)):
+**Reference numbers** (4-core Xeon @ 2.1 GHz — regenerate with `make bench`;
+see [`docs/RESULTS.md`](docs/RESULTS.md)):
 
 | | mandelbrot | binarytrees | wordfreq | startup | peak RSS (trees) |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -78,20 +103,25 @@ Detailed facilitator timings, scripts and expected questions:
 | TypeScript | 86 ms | **240 ms** | 1290 ms | 29 ms | 98 MB |
 | Python | 2300 ms | 4350 ms | 895 ms | 11 ms | 20 MB |
 
+The four surprises that carry the session:
+
+- **Python beats Java and TypeScript at `wordfreq`** — you are benchmarking
+  libraries as much as languages.
+- **Java allocates faster than Rust** at `binarytrees`, using 14x the memory.
+- **Java's cold start is 30x Rust's.**
+- **Python's cold start beats Node's.**
+
 > **Facilitator note:** do not let anyone leave this block thinking the table is
-> a ranking. It is four different rankings that disagree with each other. That
-> disagreement *is* the curriculum.
+> a ranking. It is four rankings that disagree. That disagreement *is* the
+> curriculum.
 
 ---
 
-## Block 1 — Types (0:20–0:50)
+## Block 1 — Types (25–30 min)
 
-**Goal:** replace "typed vs untyped" with a two-axis model, and kill the belief
-that TypeScript types exist at run time.
+**Run:** `make demo-typing`
 
-Run: `make demo-typing`
-
-**(10 min) The two axes.** Draw this and keep it on the board all session:
+**(8 min) The two axes.** Draw this and keep it on the board all session:
 
 ```
                     STATIC (checked at compile time)
@@ -109,8 +139,7 @@ Run: `make demo-typing`
 
 These are independent. Most juniors have them fused into one axis.
 
-**(12 min) The same bug in five languages.** The demo walks a payload where
-`subtotal` arrived as `"100"` instead of `100`:
+**(10 min) The same bug in five languages.** Payload has `subtotal` as `"100"`:
 
 | Language | What happens | When you find out |
 | --- | --- | --- |
@@ -119,8 +148,7 @@ These are independent. Most juniors have them fused into one axis.
 | TypeScript | `"1005"` — *identical to JavaScript* | at run time, despite the types |
 | Go / Java / Rust | will not compile | before it exists |
 
-**(8 min) The erasure moment — the highest-value five minutes of the session.**
-The demo prints the same line before and after `tsc`:
+**(7 min) The erasure moment — the highest-value five minutes of the session.**
 
 ```ts
 const total: number = order.subtotal + order.shipping;   // TypeScript
@@ -129,38 +157,23 @@ const total: number = order.subtotal + order.shipping;   // TypeScript
 const total = order.subtotal + order.shipping;           // emitted JavaScript
 ```
 
-`interface Order` appears **zero** times in the output. Then say the rule:
+`interface Order` appears **zero** times in the output. Then state the rule:
 
 > Types protect the **inside** of your program. At every boundary — HTTP, JSON,
 > env vars, the database, message queues — you must **validate**, not annotate.
-
-**Discussion prompt:** *"Given that, is TypeScript worth it?"*
-Steer toward: yes, overwhelmingly — most bugs are internal refactoring bugs,
-and that is exactly what it catches. But it buys you nothing at the boundary,
-which is where the scary bugs live.
 
 Deep dive: [`docs/01-typing.md`](docs/01-typing.md)
 
 ---
 
-## Block 2 — Compilation: AOT, JIT, interpreter (0:50–1:20)
+## Block 2 — Compilation: AOT, JIT, interpreter (25–30 min)
 
-**Goal:** explain *why* Java is slow to start and fast in steady state, and why
-that single fact drives most real architecture decisions.
+**Run:** `make demo-jit`
 
-Run: `make demo-jit`
+**(8 min) The three strategies:** interpreter (CPython), JIT (HotSpot, V8),
+AOT (Rust, Go). Cover tiered compilation and deoptimisation.
 
-**(8 min) The three strategies.** Build the vocabulary first:
-
-- **Interpreter** (CPython): read bytecode, do what it says. No machine code.
-- **JIT** (JVM HotSpot, V8): start interpreting, watch which code is hot,
-  compile *that* to machine code while running, using facts only knowable at
-  run time. Can **deoptimise** if an assumption breaks.
-- **AOT** (Rust, Go): compile everything to machine code before shipping.
-  What you run is what you built.
-
-**(15 min) Watch the JIT work.** The demo runs the same function in batches and
-charts per-batch time. Measured on this machine:
+**(12 min) Watch the JIT work.** Measured on this machine:
 
 ```
 Rust      (AOT)  first batch  3.6 ms → steady  3.1 ms    flat  (1.2x)
@@ -173,205 +186,314 @@ Python    (int)  ─────────────  steady 101.9 ms       
 
 Two things to land hard:
 
-1. **Java's steady state (2.9 ms) beats Rust's (3.1 ms).** A JIT knows things
-   an AOT compiler cannot — actual branch frequencies, actual types, which
-   virtual calls are really monomorphic. "Compiled is faster than JIT" is
-   folklore. *The JIT's problem is not its ceiling, it is how long it takes to
-   get there.*
+1. **Java's steady state (2.9 ms) beats Rust's (3.1 ms).** "Compiled is faster
+   than JIT" is folklore. The JIT's problem is time-to-peak, not peak.
 2. **`java -Xint` is 16x slower than `java`.** That gap is what the JIT is
-   worth. Then note: that 16x is roughly the gap between Python and the
-   compiled languages — because it is the same gap, for the same reason.
+   worth — and it is roughly the Python gap, for the same reason.
 
-**(7 min) The consequence.** Ask: *"Where does a warm-up cost hurt most?"*
-Lead the room to: anything short-lived. Lambda functions, CLI tools, batch
-jobs, scale-to-zero pods, CI steps. And anything long-lived is fine — which is
-why the JVM dominates in long-running backend services and is painful in
-serverless.
+**(7 min) The consequence.** Warm-up as a fraction of process life decides
+everything: Lambda and CLI tools want AOT; a 30-day service does not care.
 
 Deep dive: [`docs/02-compilation.md`](docs/02-compilation.md)
 
 ---
 
-## Break (1:20–1:35)
+## Block 2b — Same runtime, different language: tail calls (10–15 min)
+
+**Run:** `make demo-tailcalls`
+**Setup once (needs network):** `bash tools/get_jvm_langs.sh`
+
+**Goal:** break the belief that "we're a JVM shop" settles anything.
+
+The same function, recursive call in tail position, `sumTail(10_000_000)`:
+
+| Language | Result | Bytecode emitted |
+| --- | --- | --- |
+| Java | **`StackOverflowError`** at ~14,119 frames | `invokestatic sumTail` |
+| Scala (`@tailrec`) | `50000005000000` | **`goto 0`** |
+| Kotlin (`tailrec`) | `50000005000000` | **`goto 0`** |
+
+The demo prints that bytecode live with `javap -c`. Same JVM, same JIT, same
+GC, same bytecode format — the **compiler** is what changed.
+
+**Three beats:**
+
+1. **TCO is a narrow rewrite of a narrow shape.** Scala's `factorial` still
+   overflows, because the multiply happens *after* the call returns. Not magic.
+2. **`@tailrec` is enforcement, not optimisation.** scalac would optimise
+   anyway; the annotation makes it *mandatory*. Adding `+ 0` after the call
+   fails the build:
+   ```
+   error: could not optimize @tailrec annotated method sumBroken:
+          it contains a recursive call not in tail position
+   ```
+   A silent stack-overflow cliff became a compile error. **That is the same
+   move as Block 1 and Block 4** — point at it explicitly.
+3. **Why not Java?** Tail calls are not a JVM instruction; the verifier and
+   stack-walking model assume frames exist. Scala and Kotlin do not ask the JVM
+   for anything — they compile the recursion into a loop themselves.
+
+**Do not oversell it.** For most teams **Kotlin's null safety** (`String?` vs
+`String` as distinct types) is a far bigger practical win than TCO. Say so.
+
+Deep dive: [`docs/07-jvm-languages-tail-calls.md`](docs/07-jvm-languages-tail-calls.md)
 
 ---
 
-## Block 3 — Memory: stack, heap, garbage collection (1:35–2:10)
+## Break (10–15 min)
 
-Run: `make demo-memory` then `make demo-gc`
+---
 
-**(10 min) Stack vs heap, shown by the compiler.** Go's escape analysis makes
-this observable rather than theoretical:
+## Block 3 — Memory: stack, heap, garbage collection (30–35 min)
+
+**Run:** `make demo-memory` then `make demo-gc`
+
+**(8 min) Stack vs heap, shown by the compiler.** Go's escape analysis:
 
 ```
 go build -gcflags='-m' demos/stack-heap/escape.go
-  demos/stack-heap/escape.go:40:7: &Point{...} escapes to heap
+  escape.go:40:7: &Point{...} escapes to heap
 ```
-
-Same struct, same fields, same arithmetic — the only difference is whether a
-pointer escaped the function:
-
 ```
 stack-allocated :   13.1 ms
 heap-allocated  :  321.1 ms      24.4x slower, plus 20M objects for the GC
 ```
 
-Rules to state plainly:
-- **Stack:** bump a pointer, freed automatically on return, ~free, but small
-  and fixed (8 MB typical). Depth is a budget.
-- **Heap:** large and flexible, but every object costs an allocation now and a
-  collection later.
-
-**(8 min) What one object actually costs.** Measured directly, 1,000,000 live
-nodes each holding two references:
+**(7 min) What one object costs.** 1,000,000 live nodes, two references each —
+the *data* is 16 bytes in every language:
 
 | Language | bytes/node | Why |
 | --- | ---: | --- |
 | Go | **16.0** | two pointers, no header at all |
 | Java | 24.8 | 12-byte header + 2 compressed refs + padding |
-| Rust | 32.1 | 16 bytes of data, rounded to the allocator's 32-byte class |
+| Rust | 32.1 | 16 B data, rounded to the allocator's 32-byte class |
 | Python (`__slots__`) | 48.4 | PyObject header + two pointers |
-| Node | 80.0 | hidden-class ptr + properties + elements stores |
+| Node | 80.0 | hidden-class ptr + properties + elements |
 | Python (plain class) | **94.6** | the per-instance `__dict__` |
 
-The Python row is the actionable one: **adding `__slots__` halves it.**
+**(12 min) Collectors, judged by tail latency.** Point at `max`, not `mean`:
 
-**(12 min) Garbage collectors, judged by tail latency.** Same code, same heap,
-different collector. Point at `max`, not `mean`:
+| Collector | mean | p99 | max |
+| --- | ---: | ---: | ---: |
+| SerialGC | 1.5 µs | 5.3 µs | **12111 µs** |
+| ParallelGC | 1.5 µs | 4.2 µs | 11865 µs |
+| G1GC (default) | 4.8 µs | 37.8 µs | 6972 µs |
+| ZGC | 7.3 µs | 52.0 µs | **1222 µs** |
+| Go GOGC=100 | 5.6 µs | 32.4 µs | 1611 µs |
+| Go GOGC=400 | 4.7 µs | 16.8 µs | 856 µs |
+| Go GOGC=off | **25.9 µs** | 116 µs | 5451 µs |
 
-| Collector | mean | p99 | max | character |
-| --- | ---: | ---: | ---: | --- |
-| SerialGC | 1.5 µs | 5.3 µs | **12111 µs** | lowest overhead, worst pauses |
-| ParallelGC | 1.5 µs | 4.2 µs | 11865 µs | throughput king, stops the world |
-| G1GC (default) | 4.8 µs | 37.8 µs | 6972 µs | balanced, region-based |
-| ZGC | 7.3 µs | 52.0 µs | **1222 µs** | concurrent, 10x better worst case |
-| Go (GOGC=100) | 5.6 µs | 32.4 µs | 1611 µs | tuned for pauses over throughput |
-| Go (GOGC=400) | 4.7 µs | 16.8 µs | 856 µs | collect less often |
-| Go (GOGC=off) | **25.9 µs** | 116 µs | 5451 µs | *slower* — see below |
+1. **The mean barely moves** — best argument for percentile monitoring you'll get.
+2. **`GOGC=off` is *slower*.** The heap sprawls out of cache. "Less GC" ≠ "faster".
+3. **Rust is absent** because it has no collector — its cost is in the mean, never a pause.
 
-Three things to say:
-1. **The mean barely moves.** If you only look at averages you will conclude GC
-   choice does not matter. It matters enormously — just not in the mean.
-2. **`GOGC=off` is slower, not faster.** Turning the collector off lets the live
-   heap sprawl out of cache. "Less GC" ≠ "faster"; a compacting collector also
-   buys you locality. Great moment to puncture a common intuition.
-3. **Rust is absent from this table** because it has no collector. Its cost is
-   spread evenly across every `drop`, so it shows up in the mean, never as a
-   pause. That is the real reason Rust attracts latency-critical work.
-
-**(5 min) The container rule.** The single most common JVM production incident:
-a JVM that does not know it is in a container sizes its heap from the *host's*
-memory and gets OOM-killed. Fix: `-XX:MaxRAMPercentage=75` (Java),
-`GOMEMLIMIT` (Go). Size limits from **RSS**, never from heap.
+**(5 min) The container rule.** `-XX:MaxRAMPercentage=75`, `GOMEMLIMIT`.
+Size limits from **RSS**, never from heap.
 
 Deep dive: [`docs/03-memory.md`](docs/03-memory.md)
 
 ---
 
-## Block 4 — Cold starts and cloud deployment (2:10–2:35)
+## Block 4 — Concurrency and parallelism (30–40 min)
 
-Run: `make bench-startup`
+**Run:** `make demo-concurrency`
 
-**(8 min) The cold-start table.** Measured, doing nothing at all:
+**(5 min) The distinction.** Write it on the board:
 
-| Language | cold start | baseline RSS | container image (typical) |
-| --- | ---: | ---: | ---: |
-| Rust | **1.5 ms** | 14 MB | 5–10 MB (scratch/distroless) |
-| Go | **1.5 ms** | 14 MB | 10–20 MB (scratch/distroless) |
-| Python | 11 ms | 14 MB | 50–120 MB (slim) |
-| Node | 29 ms | 44 MB | 60–150 MB (slim/alpine) |
-| Java | 46 ms | 40 MB | 180–400 MB (JRE base) |
+> **Concurrency** is *dealing with* many things at once — a program structure.
+> **Parallelism** is *doing* many things at once — a hardware property.
 
-**(10 min) Why this is the most decision-relevant table in the session.**
-Work through the multipliers:
-- **Serverless:** you pay cold start on *every* scale-out event. A 46 ms JVM
-  boot on a 100 ms function is a 46% tax.
-- **Autoscaling:** cold start is how fast you can absorb a traffic spike.
-- **Rolling deploys:** cold start × number of pods = deploy duration.
-- **Bin packing:** baseline RSS decides how many replicas fit per node, which
-  decides your node count, which is most of your bill.
+Then the question that settles most design arguments: **are you waiting, or are
+you computing?** Waiting → concurrency (async, virtual threads). Computing →
+parallelism (real threads on real cores). `async` gives CPU work exactly 0x.
 
-Then give the mitigations, so nobody leaves thinking "never use Java":
-- Java: **AppCDS** (~30% off), **GraalVM native-image** (~5 ms, at the cost of
-  build complexity and reflection config), or simply **keep the JVM warm** —
-  a long-lived pod behind a queue makes the whole problem disappear.
-- Node: **bundle to a single file.** Module resolution over a deep
-  `node_modules` tree often costs more than V8's boot.
-- Python: avoid heavy imports at module scope (`import pandas` is ~200 ms).
+**(12 min) Part 1 — can you use all your cores?** Same Mandelbrot kernel as
+Block 0, `n=2000`, 4-core machine:
 
-**(7 min) Deployment checklist.** Walk [`docs/04-cold-start-cloud.md`](docs/04-cold-start-cloud.md):
-multi-stage builds, distroless/scratch, pinned base images, health probes
-matched to real start-up time, and the memory-limit rules from Block 3.
+| Language | 1 worker | 2 workers | 4 workers | scaling |
+| --- | ---: | ---: | ---: | ---: |
+| Rust | 234 ms | 117 ms | 87 ms | **2.69x** |
+| Go | 245 ms | 126 ms | 113 ms | 2.18x |
+| Java | 308 ms | 167 ms | 150 ms | 2.05x |
+| TypeScript (workers) | 261 ms | 202 ms | 177 ms | 1.47x |
+| **Python (threads)** | 8718 ms | 9183 ms | 9307 ms | **0.94x** |
+| **Python (processes)** | 8840 ms | 4489 ms | 3353 ms | 2.64x |
+
+- **The flat Python threads row is the GIL** — eight threads take turns. This is
+  the single most surprising fact for most juniors in the room.
+- **Processes scale** (0.94x → 2.64x) at the cost of spawn + pickling.
+- **Nobody hits 4.00x.** Amdahl's law is not a suggestion.
+
+**(13 min) Part 2 — what happens when you share state?** Eight threads,
+100,000 increments each, expected 800,000:
+
+| Language | Result | When you find out |
+| --- | --- | --- |
+| Go | 493,211 — **lost 306,789** | run time, only with `-race` |
+| Java (plain) | 231,766 | run time, never automatically |
+| Java (**`volatile`**) | 282,105 — **still broken** | run time |
+| Node (SharedArrayBuffer) | 509,242 | run time |
+| **Rust** | **does not compile** | **compile time** |
+
+Three beats:
+
+1. **`counter++` is never one operation** — load, add, store.
+2. **The `volatile` trap.** It buys *visibility*, not *atomicity*. Juniors
+   reach for it constantly; the demo shows it losing 517,895 increments.
+3. **Rust is the concurrency twin of Block 1.** `error[E0499]`. Same shape as
+   the typing demo: four languages compile the broken program, one refuses.
+   Then show the fix — the strategy goes *in the type*: `Mutex<u64>`, `AtomicU64`.
+
+**The Python GIL question, answered honestly.** The demo runs two experiments:
+
+```
+EXPERIMENT 1 - tight CPU loop:  racy += lost 0     -> looks correct
+EXPERIMENT 2 - check-then-act with I/O in between:
+    seat limit 100, 320 attempts, racy sold 20, locked sold 100
+```
+
+Experiment 1 usually passes because a thread that never blocks holds the GIL
+for its whole loop. **A race that does not reproduce is still a race.**
+Experiment 2 fails every time — and it is the realistic one, because the GIL is
+released on every socket read and database call.
+
+> Python's races do not hide in tight loops. They hide exactly where all real
+> Python code lives.
+
+**Honest caveat to state:** Rust prevents *data races*, not *race conditions*.
+Deadlocks, lost wakeups and check-then-act across an `await` are still yours.
+
+Deep dive: [`docs/06-concurrency.md`](docs/06-concurrency.md) — includes a
+per-chapter table of how concurrency changes the conclusions of Blocks 1–5.
 
 ---
 
-## Block 5 — Energy and carbon (2:35–2:50)
+## Block 5 — Cold starts, cloud and carbon (20 min merged / 30 min split)
 
-Run: `make carbon`
+**Run:** `make bench-startup` then `make carbon`
 
-**(6 min) The model, with its assumptions on screen.** You cannot read joules
-from userspace, so this uses the standard published model:
+**(8 min) The cold-start table**, doing nothing at all:
 
-```
-energy = CPU-seconds x (TDP / cores) x utilisation x PUE
-CO2e   = energy(kWh) x grid intensity (gCO2e/kWh)
-```
+| Language | cold start | baseline RSS | image (typical) |
+| --- | ---: | ---: | ---: |
+| Rust | **1.5 ms** | 14 MB | 5–10 MB |
+| Go | **1.5 ms** | 14 MB | 10–20 MB |
+| Python | 11 ms | 14 MB | 50–120 MB |
+| Node | 29 ms | 44 MB | 60–150 MB |
+| Java | 46 ms | 40 MB | 180–400 MB |
 
-Every constant is a flag. Say clearly: **absolute values are soft, the ranking
-is robust.** 4x the CPU-seconds is 4x the energy under any assumptions.
+Work the multipliers: serverless pays it per scale-out; autoscaling speed *is*
+cold start; deploy time = cold start × pods; and **baseline RSS decides bin
+packing**, which is most of your bill (100 replicas: 1 node for Go, 10 for Java).
 
-**(9 min) The honest conclusion.** At 50M executions/month, `wordfreq`:
+Mitigations so nobody leaves thinking "never use Java": CDS is already on and
+worth ~31% (`-Xshare:off` to prove it), GraalVM native-image → ~5 ms, or just
+**keep the JVM warm**.
+
+**(8 min) Carbon.** `wordfreq` at 50M executions/month:
 
 ```
 rust        225 ms CPU     3.93 kg CO2e/month
 typescript 1504 ms CPU    26.23 kg CO2e/month
-→ switching saves ~22 kg/month = 0.27 tonnes/year
+→ switching saves ~22 kg/month = 0.27 t/year
 ```
 
-Now puncture it, in this order:
-
+Then puncture it, in order:
 1. **0.27 t/year is less than one transatlantic flight.** At low volume,
-   language choice is climate *noise*. Do not let anyone justify a rewrite on
-   carbon grounds at 100 runs/month.
-2. **Changing region beats changing language by ~17x.**
-   `--region eu-north-1` cuts the same workload's emissions ~17x with **zero
-   code change**. Run it live.
-3. **The real carbon argument is density, not CPU.** 1/10th the memory means
-   1/10th the machines, and you avoid the *embodied* carbon of hardware you
-   never bought. That is why the peak-RSS column matters more than it looks.
-4. **A carbon number without its assumptions is a vibe, not a measurement.**
+   language choice is climate noise.
+2. **Region beats language by ~17x.** Run `--region eu-north-1` live: 26.23 kg
+   → 1.50 kg with zero code change.
+3. **The real argument is density**, not CPU — 1/10th the memory is 1/10th the
+   machines, and the embodied carbon you never bought.
+4. **A carbon number without its assumptions is a vibe.**
 
-Deep dive: [`docs/05-carbon.md`](docs/05-carbon.md)
+Deep dives: [`docs/04-cold-start-cloud.md`](docs/04-cold-start-cloud.md),
+[`docs/05-carbon.md`](docs/05-carbon.md)
 
 ---
 
-## Block 6 — The decision framework (2:50–3:00)
+## Block 6 — The decision framework (7–10 min)
 
-Hand out / display [`docs/00-how-to-choose.md`](docs/00-how-to-choose.md).
+Display / hand out [`docs/00-how-to-choose.md`](docs/00-how-to-choose.md).
 
-**The order the questions must be asked in** — the point is that performance is
-question five, not question one:
+**Ask the questions in this order** — performance is question five:
 
-1. **What does the team already know?** A language your team is fluent in beats
-   a faster one they are learning, almost always.
-2. **What is the ecosystem?** ML → Python. Browser → JS/TS. Kubernetes
-   tooling → Go. Android → Kotlin. This decides more than speed does.
-3. **What is the failure cost?** Payments and medical devices justify Rust's
-   strictness. An internal dashboard does not.
-4. **What is the execution shape?** Short-lived (CLI, Lambda) → AOT.
-   Long-lived (service) → JIT is fine and often better.
-5. **Only now: is it actually CPU-bound?** Most services are I/O-bound and
-   spend their lives waiting on a database. For those, language speed is nearly
-   irrelevant and the `wordfreq` result is your evidence.
+1. **What does the team already know?**
+2. **What does the ecosystem force?** (ML → Python; browser → TS; k8s → Go)
+3. **What does failure cost?** (payments justify Rust's strictness; a dashboard doesn't)
+4. **What is the execution shape?** (short-lived → AOT; long-lived → JIT is fine)
+5. **Only now: is it actually CPU-bound?** Most services are I/O-bound —
+   `wordfreq` is your evidence.
 
-**Closing exercise (5 min).** Give the room three scenarios and have them argue:
+**Closing exercise (5 min)** if time allows:
 
-- *A CLI tool run 500 times a day by developers.* → cold start dominates; Go or
-  Rust; Java is the wrong answer for a reason they can now name.
-- *A REST API doing 3 database queries per request.* → I/O-bound; pick for
-  ecosystem and team; almost any of the five is fine.
-- *A nightly job processing 2 TB.* → throughput and memory; JVM or Go or Rust;
-  Python only if the heavy lifting is in NumPy/Polars (call back to `wordfreq`).
+- *A CLI tool run 500 times a day.* → cold start dominates; Go or Rust.
+- *A REST API doing 3 DB queries per request.* → I/O-bound; pick for team and
+  ecosystem; concurrency model matters more than raw speed.
+- *A nightly job over 2 TB.* → throughput and memory; JVM/Go/Rust, or Python
+  **only** if the heavy lifting is in NumPy/Polars.
+
+---
+
+## Block 7 — Closing note: robust vs antifragile (8–10 min)
+
+**No demo. No benchmark.** Leave them with a question that outlives the numbers.
+Full text: [`docs/08-robust-vs-antifragile.md`](docs/08-robust-vs-antifragile.md)
+
+**(3 min) Taleb's three responses to stress:**
+
+| | Under stress | Software example |
+| --- | --- | --- |
+| **Fragile** | breaks | one server, no backups |
+| **Robust** | resists, unchanged | replicas, retries, circuit breakers |
+| **Antifragile** | **gets stronger** | *…we do not know how to build this* |
+
+**(4 min) The thought experiment.** Put it to the room:
+
+> Imagine a service measurably *more secure after an attack than before* — not
+> because a human read the logs and patched it, but because the system itself
+> metabolised the attack.
+
+Let them work out what that needs. They will land on: detect without labels,
+judge hostile vs merely novel, change itself, know whether the change helped,
+and do it **without opening a new hole**. That last one is fatal — a system that
+rewrites its own defences has handed the attacker a new input channel. We
+already have a name for that: **data poisoning**.
+
+Then the honest survey: chaos engineering, fuzzing, WAFs, autoscaling,
+canary+rollback. Every one converts disorder into improvement **through
+something outside the running system** — a human, a retro, an offline training
+run. The system is a conduit for learning, not the learner.
+
+**(3 min) The bridge — and this is why it is in a *programming* session.**
+To get stronger from disorder, a system must keep the *pattern* behind ten
+thousand attacks instead of the ten thousand records. **That is compression.**
+
+3Blue1Brown's series **"Compression is Intelligence"**
+([Part 1](https://www.youtube.com/watch?v=l6DKRf-fAAM),
+[Part 2](https://www.youtube.com/watch?v=GlYgs6v2YfU), June 2026) lays out the
+information theory: from Shannon, **prediction and compression are
+mathematically two sides of the same coin** — a good model *is* a good
+compressor. So:
+
+```
+antifragile ⇒ improves from disorder ⇒ extracts structure from experience
+            ⇒ predicts the next attack better ⇒ compresses its history into a model
+            ⇒ ...which is exactly what we mean by "learns"
+```
+
+**Antifragility is a learning problem wearing an engineering costume.**
+
+**Land the plane by relabelling the whole session:** static types, `@tailrec`,
+the borrow checker, `GOMEMLIMIT`, cold-start budgets — every single choice today
+was a *fragility* decision. They all **move failure earlier or make it smaller**.
+Not one makes the software better *because* it failed. Our entire toolkit is a
+toolkit for row two.
+
+> The antifragile component in your architecture today is **the team**.
+
+That is not a defeat, and juniors should hear it explicitly — it tells them
+where their own value sits.
 
 **Last slide, one sentence:**
 
@@ -385,9 +507,11 @@ question five, not question one:
 Run this **the day before**, on the machine you will present from:
 
 ```bash
-make setup     # deps + generate the corpus
-make bench     # regenerates docs/RESULTS.md with YOUR numbers
-make verify    # runs every demo once, end to end
+make doctor      # every toolchain present?
+make setup       # deps + generate the corpus
+make jvm-langs   # Scala + Kotlin compilers (needs network, once)
+make bench       # regenerates docs/RESULTS.md with YOUR numbers
+make verify      # runs all nine demos end to end
 ```
 
 The numbers quoted above are from a 4-core Xeon @ 2.1 GHz. Yours will differ —
