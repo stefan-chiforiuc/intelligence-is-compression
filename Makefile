@@ -37,6 +37,9 @@ help:
 	@echo "    make demo-memory      block 3  — stack vs heap, object cost"
 	@echo "    make demo-gc          block 3  — collectors and tail latency"
 	@echo "    make demo-concurrency block 4  — parallel scaling + data races"
+	@echo "    make demo-parallel-cost block 4b — when NOT to parallelise; virtual threads"
+	@echo "    make demo-api-race    block 4b — 20 users, one shared array, real HTTP"
+	@echo "    make demo-db          block 5b — connection pools + transaction races"
 	@echo "    make bench-startup    block 5  — cold starts only (fast)"
 	@echo "    make carbon           block 6  — energy and CO2e estimate"
 	@echo ""
@@ -161,6 +164,32 @@ demo-parallel:
 demo-races:
 	@bash demos/concurrency/races/run.sh
 
+# --- Block 4b: when to parallelise, virtual threads, the API race -----------
+.PHONY: demo-parallel-cost
+demo-parallel-cost:
+	@mkdir -p build/demos/parcost
+	@javac -d build/demos/parcost demos/java-parallel-cost/*.java $(NOJAVANOISE)
+	@java -cp build/demos/parcost ParallelCost $(NOJAVANOISE)
+	@echo ""
+	@java -cp build/demos/parcost VirtualThreads $(NOJAVANOISE)
+
+.PHONY: demo-api-race
+demo-api-race:
+	@bash demos/api-race/run.sh
+
+# --- Block 5b: databases ----------------------------------------------------
+.PHONY: demo-db
+demo-db:
+	@bash demos/db-scaling/run.sh
+
+.PHONY: demo-db-pool
+demo-db-pool:
+	@$(PY) demos/db-scaling/pool_sizing.py
+
+.PHONY: demo-db-txn
+demo-db-txn:
+	@$(PY) demos/db-scaling/transactions.py
+
 .PHONY: carbon
 carbon: results.json
 	@$(PY) tools/carbon.py --requests 50e6
@@ -176,31 +205,42 @@ results.json:
 .PHONY: verify
 verify: setup jvm-langs
 	@echo ""
-	@echo "=== 1/9 benchmark suite (quick) ==============================="
+	@echo "=== 1/12 benchmark suite (quick) ==============================="
 	@$(PY) tools/bench.py --reps 1 --warmup 0 --no-build
 	@echo ""
-	@echo "=== 2/9 typing demo ==========================================="
+	@echo "=== 2/12 typing demo ==========================================="
 	@bash demos/typing/run.sh --fast >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 3/9 jit warm-up demo ======================================"
+	@echo "=== 3/12 jit warm-up demo ======================================"
 	@$(PY) demos/jit-warmup/run.py --langs rust go java >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 4/9 tail-call demo (Java/Scala/Kotlin) ===================="
+	@echo "=== 4/12 tail-call demo (Java/Scala/Kotlin) ===================="
 	@bash demos/tail-calls/run.sh >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 5/9 memory demo ==========================================="
+	@echo "=== 5/12 memory demo ==========================================="
 	@bash demos/stack-heap/objsize/run.sh >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 6/9 gc demo ==============================================="
+	@echo "=== 6/12 gc demo ==============================================="
 	@bash demos/gc/run.sh >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 7/9 parallel scaling demo ================================="
+	@echo "=== 7/12 parallel scaling demo ================================="
 	@$(PY) demos/concurrency/parallel/run.py --size 600 >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 8/9 data race demo ========================================"
+	@echo "=== 8/12 data race demo ========================================"
 	@bash demos/concurrency/races/run.sh >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 9/9 carbon estimate ======================================="
+	@echo "=== 9/12 parallelism cost + virtual threads ==================="
+	@mkdir -p build/demos/parcost
+	@javac -d build/demos/parcost demos/java-parallel-cost/*.java $(NOJAVANOISE)
+	@java -cp build/demos/parcost ParallelCost >/dev/null 2>&1 && echo "  ok"
+	@echo ""
+	@echo "=== 10/12 api race (20 users, shared array) ==================="
+	@bash demos/api-race/run.sh 8 5 50 >/dev/null 2>&1 && echo "  ok"
+	@echo ""
+	@echo "=== 11/12 database pools + transactions ======================="
+	@bash demos/db-scaling/run.sh >/dev/null 2>&1 && echo "  ok"
+	@echo ""
+	@echo "=== 12/12 carbon estimate ====================================="
 	@$(PY) tools/carbon.py >/dev/null && echo "  ok"
 	@echo ""
 	@echo "All demos ran. You are ready to present."

@@ -1,6 +1,6 @@
 // Java: no tail-call optimisation. The recursion is real, and so is the stack.
 //
-// `sumTail` below IS written in tail position — the recursive call is the very
+// `sumTail` below IS written in tail position - the recursive call is the very
 // last thing the method does. In Scala or Kotlin that shape compiles to a loop.
 // In Java it compiles to a recursive `invokestatic`, and it blows the stack.
 //
@@ -8,7 +8,7 @@
 //
 // The point is NOT "Java is bad". The point is that two languages targeting the
 // SAME bytecode, on the SAME JVM, with the same JIT, disagree about whether this
-// program is valid — because the transformation happens in the compiler, not the
+// program is valid - because the transformation happens in the compiler, not the
 // runtime.
 public final class Recursion {
 

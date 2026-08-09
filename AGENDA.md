@@ -18,20 +18,27 @@ Everything in this session is evidence for that sentence.
 
 ## ⚠️ Read this before you plan your slot
 
-The material here now runs to roughly **3 hours 40 minutes** if you demo
-everything at a comfortable pace. Two ways to fit it:
+The material here now runs to roughly **5 hours** if you demo everything at a
+comfortable pace. That is deliberate — it is a **library**, not a script. Pick
+a variant:
 
-| Variant | Length | What you give up |
+| Variant | Length | Contents |
 | --- | --- | --- |
-| **A — Core** (below) | 3:00 | Cold start, cloud and carbon are merged into one 20-minute block. You show the tables and skip the Dockerfile/Kubernetes walkthrough. |
-| **B — Extended** | 4:00 | Nothing. Every block gets its natural length and there are two breaks. |
+| **A — Core** | 3:00 | Blocks 0–3, a compressed concurrency block, cold start + carbon merged, framework, close. No databases, no parallelism-cost block. |
+| **B — Concurrency-heavy** | 4:00 | A + the full concurrency track (4, 4b) including the 20-user API race. Drops the carbon block to 8 minutes. |
+| **C — Full** | 5:00 | Everything, including databases (5b) and the GCP live demo. Needs two breaks and a hard stop. |
 
-**Recommendation: if you can get 3.5–4 hours, take it.** Concurrency (Block 4)
-is the block juniors have the least prior exposure to and the one that generates
-the most discussion; squeezing it below 30 minutes wastes it. If you are locked
-to 3 hours, run Variant A exactly as written and *do not* try to smuggle the cut
-material back in — you will overrun and lose the closing framework, which is the
-part they take home.
+**Recommendation:** run **B** over two sessions rather than C in one sitting.
+Three hours is already at the limit of what juniors absorb; five is not a
+training, it is an endurance test. A natural split is:
+
+- **Session 1 — the language:** Blocks 0, 1, 2, 2b, 3 (types, compilation,
+  memory). ~2:15.
+- **Session 2 — the system:** Blocks 4, 4b, 5, 5b, 6, 7 (concurrency,
+  databases, cloud, the framework, the close). ~2:30.
+
+That split is also pedagogically cleaner: session 1 is "what does this language
+do to my code", session 2 is "what happens when many things run at once".
 
 ### Variant A — Core (3:00)
 
@@ -48,25 +55,42 @@ part they take home.
 | 2:45–2:52 | 6. The decision framework | `docs/00-how-to-choose.md` |
 | 2:52–3:00 | 7. Closing note: robust vs antifragile | `docs/08-robust-vs-antifragile.md` |
 
-### Variant B — Extended (4:00)
+### Variant B — Concurrency-heavy (4:00)  ← recommended
 
-| Time | Block |
-| --- | --- |
-| 0:00–0:20 | 0. Setup + the big table |
-| 0:20–0:50 | 1. Types |
-| 0:50–1:20 | 2. Compilation |
-| 1:20–1:35 | 2b. Tail calls: Java vs Scala vs Kotlin |
-| 1:35–1:50 | **Break** |
-| 1:50–2:25 | 3. Memory |
-| 2:25–3:05 | 4. Concurrency and parallelism |
-| 3:05–3:15 | **Break** |
-| 3:15–3:33 | 5. Cold starts and cloud deployment |
-| 3:33–3:45 | 6. Energy and carbon |
-| 3:45–3:52 | 7. The decision framework |
-| 3:52–4:00 | 8. Closing note: robust vs antifragile |
+| Time | Block | Command |
+| --- | --- | --- |
+| 0:00–0:20 | 0. Setup + the big table | `make bench` |
+| 0:20–0:50 | 1. Types | `make demo-typing` |
+| 0:50–1:15 | 2. Compilation: AOT, JIT, interpreter | `make demo-jit` |
+| 1:15–1:28 | 2b. Tail calls: Java vs Scala vs Kotlin | `make demo-tailcalls` |
+| 1:28–1:43 | **Break** | |
+| 1:43–2:15 | 3. Memory: stack, heap, GC | `make demo-memory` `make demo-gc` |
+| 2:15–2:45 | 4. Concurrency: cores and races | `make demo-concurrency` |
+| 2:45–3:05 | **4b. When NOT to parallelise + virtual threads** | `make demo-parallel-cost` |
+| 3:05–3:15 | **Break** | |
+| 3:15–3:35 | **4c. 20 users, one shared array** | `make demo-api-race` |
+| 3:35–3:47 | 5. Cold starts + cloud | `make bench-startup` |
+| 3:47–3:52 | 6. Carbon *(compressed)* | `make carbon` |
+| 3:52–3:56 | 7. The decision framework | `docs/00-how-to-choose.md` |
+| 3:56–4:00 | 8. Closing note: robust vs antifragile | `docs/08-robust-vs-antifragile.md` |
+
+### Variant C — Full (5:00, or split across two sessions)
+
+Variant B, plus **5b. Databases** (30 min, `make demo-db`) after Block 5, and
+optionally the 15-minute GCP live demo from
+[`GCP-RUNBOOK.md`](demos/db-scaling/GCP-RUNBOOK.md).
 
 Facilitator timings, what to cut when you overrun, and expected questions:
 **[`docs/FACILITATOR-NOTES.md`](docs/FACILITATOR-NOTES.md)**
+
+### The three optional blocks, at a glance
+
+| Block | Doc | The one number |
+| --- | --- | --- |
+| **4b** When not to parallelise | [`09`](docs/09-when-to-parallelize.md) | `parallelStream` was **16x slower** on 10,000 cheap elements |
+| **4b** Virtual threads | [`09`](docs/09-when-to-parallelize.md) | **15.2x faster** on blocking I/O, **1.02x** on CPU work |
+| **4c** 20-user API race | [`09`](docs/09-when-to-parallelize.md) | **3,874 of 200,000 items lost**, HTTP 204 every time |
+| **5b** Databases | [`10`](docs/10-databases-and-scaling.md) | pool of 200 buys **0.38x throughput for 70x latency**; naive booking **confirmed 400, stored 25** |
 
 ---
 
@@ -368,6 +392,107 @@ per-chapter table of how concurrency changes the conclusions of Blocks 1–5.
 
 ---
 
+## Block 4b — When *should* you parallelise? (20 min)
+
+**Run:** `make demo-parallel-cost`
+Deep dive: [`docs/09-when-to-parallelize.md`](docs/09-when-to-parallelize.md)
+
+**Goal:** Block 4 asked whether you *can* use your cores. This asks whether you
+*should* — because `.parallelStream()` is one word longer than `.stream()`, so
+the cost is invisible at the call site.
+
+**(10 min) The crossover.** Measured, 4 cores:
+
+| elements | cheap op (multiply-add) | expensive op (~50 float iters) |
+| ---: | --- | --- |
+| 1,000 | 0.35x — **loses** | 0.25x — **loses** |
+| 10,000 | **0.06x — 16x SLOWER** | 1.95x — crossover |
+| 100,000 | 0.57x — loses | 3.47x — wins |
+| 1,000,000 | 1.18x — crossover | 3.68x — wins |
+
+> The crossover is not at a fixed element count. It is at a fixed amount of
+> **total work**. Cheap work crosses at ~1,000,000 elements; expensive work at
+> ~10,000. A **100x difference**, from cost-per-element alone.
+>
+> **Rule:** `N x cost-per-element` must be **>> ~100 µs** of setup.
+
+Name the `parallelStream()` traps: it uses the **shared**
+`ForkJoinPool.commonPool()`, so one blocking parallel stream stalls every other
+one in the JVM. Never do I/O in one.
+
+**(10 min) Virtual threads.** The one sentence they should leave reciting:
+
+> **Virtual threads make BLOCKING cheap. They do not make COMPUTING faster.**
+
+| Experiment | Platform threads | Virtual threads | |
+| --- | ---: | ---: | --- |
+| 8 CPU-bound tasks | 30.8 ms | 31.3 ms | **1.02x — no gain** |
+| 10,000 blocking I/O tasks | 2604.8 ms (200-thread pool) | 171.8 ms | **15.2x faster** |
+| Creating 100,000 threads | ~28 s, ~100 GB stack (would not fit) | **69 ms, +43 MB** | |
+
+Then the three traps, the third of which sets up the database block:
+1. `parallelStream` does not use virtual threads — the common-pool trap remains.
+2. **Virtual threads do not increase your database's capacity.** 10,000 virtual
+   threads reaching for a 10-connection pool *moves* the queue, and lets you
+   overwhelm the DB far more easily than a 200-thread pool ever could.
+3. **JDK 21 pins** virtual threads that block inside `synchronized`. Use
+   `ReentrantLock`. Fixed in **JDK 24+** (JEP 491); structured concurrency is
+   final in **25**. Virtual threads themselves are final in **21**, which is
+   what these demos run on.
+
+---
+
+## Block 4c — 20 users, one shared array (20 min)
+
+**Run:** `make demo-api-race`
+
+**Goal:** the concurrency bug as it actually appears in production. It looks
+like this, and it passes code review:
+
+```java
+private final List<String> items = new ArrayList<>();   // a controller field
+items.add(payload);                                     // in a request handler
+```
+
+**(10 min) The measured result** — a real HTTP server, 20 concurrent users,
+200,000 appends:
+
+| Implementation | actual / 200,000 | ms | verdict |
+| --- | ---: | ---: | --- |
+| `ArrayList` (no sync) | 196,126 | 572 | **LOST 3,874 items** |
+| `ArrayList` + `synchronized` | 200,000 | 332 | correct |
+| `Collections.synchronizedList` | 200,000 | 288 | correct |
+| `CopyOnWriteArrayList` | 200,000 | **16,080** | correct, **112x slower** |
+| `ConcurrentLinkedQueue` | 200,000 | **143** | correct, fastest |
+
+Nothing crashed. The API returned **204 to every caller**. All 20 users believe
+their items were saved.
+
+**"Thread-safe" is not one property.** `CopyOnWriteArrayList` copies the whole
+backing array on every write — O(n²) to fill. Correct for listener lists,
+catastrophic for a write-heavy endpoint. And compound operations still race:
+`if (!list.contains(x)) list.add(x)` is two safe calls and one bug.
+
+**(10 min) Rust — why the bug is unreachable.**
+
+```
+error[E0382]: use of moved value: `items`
+```
+
+Show both doors: **with `move`** the Vec is moved into the first handler;
+**without `move`** the closure may outlive the borrow (E0373). Neither compiles.
+The fix puts the strategy in the type — `Arc<Mutex<Vec<String>>>` — and you can
+forget neither to lock (data is inside the mutex) nor to unlock (guard drops on
+scope exit, even on panic). Measured: **110 ms**, faster than Java's
+`synchronized` at 332 ms.
+
+**State the limits:** Rust prevents *data* races, not deadlocks or logic races;
+the demo uses one global lock, which is the worst design for throughput; and
+Java's `ConcurrentLinkedQueue` was both correct *and* fastest. **The difference
+is the default** — Java's default is a structure that quietly breaks.
+
+---
+
 ## Block 5 — Cold starts, cloud and carbon (20 min merged / 30 min split)
 
 **Run:** `make bench-startup` then `make carbon`
@@ -409,6 +534,57 @@ Then puncture it, in order:
 
 Deep dives: [`docs/04-cold-start-cloud.md`](docs/04-cold-start-cloud.md),
 [`docs/05-carbon.md`](docs/05-carbon.md)
+
+---
+
+## Block 5b — Databases: pools, connections, transactions (30 min)
+
+**Run:** `make demo-db`
+Deep dive: [`docs/10-databases-and-scaling.md`](docs/10-databases-and-scaling.md)
+Live on GCP: [`demos/db-scaling/GCP-RUNBOOK.md`](demos/db-scaling/GCP-RUNBOOK.md)
+
+**Goal:** almost every service in the room's future is I/O-bound on a database,
+which is where the language matters least and the architecture matters most.
+
+**(5 min) A connection is not a cheap object.** In PostgreSQL it is a whole OS
+**process** (~5–10 MB). `max_connections` on a small managed instance is ~100 —
+so 10 pods x a pool of 20 = 200 connections against a limit of 100, and the
+service does not degrade, it **fails to connect**.
+
+**(10 min) Why a bigger pool is slower.** Simulated DB with real parallelism 8,
+200 concurrent users:
+
+| pool | throughput | p50 |
+| ---: | ---: | ---: |
+| **8** | **1883 q/s** | **4.2 ms** |
+| 32 | 1595 q/s | 20.0 ms |
+| 128 | 1009 q/s | 140.9 ms |
+| 200 | 723 q/s | 289.7 ms |
+
+> **Pool 200 buys 0.38x the throughput for 70x the p50 latency.**
+
+The queue does not vanish when you enlarge the pool — it **moves**, out of your
+app where it is visible and sheddable, into the database where it is not.
+Formula: `connections = (cores * 2) + spindles` → ~17 for an 8-core DB, not 200.
+
+**(12 min) The same race, one layer down.** 16 bookers, seat limit 100:
+
+| strategy | confirmed | stored | verdict |
+| --- | ---: | ---: | --- |
+| read-then-write, no txn | **400** | **25** | told 400 users yes, stored 25 |
+| `BEGIN` (deferred) txn | 34 | 34 | a transaction alone is not the fix |
+| `FOR UPDATE` / `BEGIN IMMEDIATE` | 100 | 100 | pessimistic |
+| optimistic (version column) | 100 | 100 | detect + retry |
+| single atomic `UPDATE` | 100 | 100 | **fastest, and the right answer** |
+
+Be precise about strategy 2: SQLite **undersells** (write conflicts), PostgreSQL
+under READ COMMITTED **oversells** (lost update). Different anomaly, same cause.
+
+**(3 min) Land the through-line.** We have now hit the *same* bug at four
+layers — a type error, `counter++`, an `ArrayList` in a handler, a database row.
+It is always READ, MODIFY, WRITE with a window in the middle. And the best fix
+is always the same shape: **make the invalid state unrepresentable** — a type,
+a `Mutex<T>`, a `CHECK` constraint. That is the fourth time this session.
 
 ---
 
