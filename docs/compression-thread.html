@@ -1,0 +1,1346 @@
+<title>The Compression Thread</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,600;0,700;1,600&display=swap">
+
+<style>
+  /* ---- tokens: complete light palette on bare :root ---------------- */
+  :root {
+    --paper:      #F6F7F9;
+    --surface:    #FFFFFF;
+    --sunk:       #EDEFF3;
+    --ink:        #15171E;
+    --ink-soft:   #2E3340;
+    --muted:      #5A6173;
+    --hairline:   #DBDEE6;
+    --hairline-2: #C7CBD6;
+    --accent:     #14646B;
+    --accent-ink: #0E4A50;
+    --accent-wash:#E2EFEF;
+    --refute:     #9C2F26;
+    --refute-wash:#F7E7E4;
+
+    --f-display: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+    --f-body:    "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --f-mono:    "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+    --measure: 63ch;
+    --step--1: clamp(0.82rem, 0.80rem + 0.10vw, 0.90rem);
+    --step-0:  clamp(1.00rem, 0.96rem + 0.18vw, 1.13rem);
+    --step-1:  clamp(1.18rem, 1.10rem + 0.35vw, 1.40rem);
+    --step-2:  clamp(1.45rem, 1.28rem + 0.75vw, 1.95rem);
+    --step-3:  clamp(1.85rem, 1.50rem + 1.60vw, 3.00rem);
+    --step-4:  clamp(2.40rem, 1.70rem + 3.20vw, 4.60rem);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #0F1116;
+      --surface:    #161A21;
+      --sunk:       #1C212A;
+      --ink:        #E9EBF1;
+      --ink-soft:   #CBD0DB;
+      --muted:      #98A0B1;
+      --hairline:   #262B35;
+      --hairline-2: #363D4A;
+      --accent:     #5FC7C6;
+      --accent-ink: #9BDEDC;
+      --accent-wash:#12303233;
+      --refute:     #E5867A;
+      --refute-wash:#3A211E4D;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:      #0F1116;
+    --surface:    #161A21;
+    --sunk:       #1C212A;
+    --ink:        #E9EBF1;
+    --ink-soft:   #CBD0DB;
+    --muted:      #98A0B1;
+    --hairline:   #262B35;
+    --hairline-2: #363D4A;
+    --accent:     #5FC7C6;
+    --accent-ink: #9BDEDC;
+    --accent-wash:#12303233;
+    --refute:     #E5867A;
+    --refute-wash:#3A211E4D;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: var(--step-0);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 74rem; margin: 0 auto; padding: 0 clamp(1.15rem, 4vw, 3.5rem); }
+
+  /* ---- progress rail --------------------------------------------- */
+  .rail-progress {
+    position: fixed; inset: 0 auto 0 0; width: 2px;
+    background: var(--hairline); z-index: 40;
+  }
+  .rail-progress span {
+    display: block; width: 100%; height: 0;
+    background: var(--accent); transition: height .12s linear;
+  }
+  @media (prefers-reduced-motion: reduce) { .rail-progress span { transition: none; } }
+
+  /* ---- masthead --------------------------------------------------- */
+  .masthead { padding: clamp(3.5rem, 11vh, 8rem) 0 clamp(2.5rem, 7vh, 5rem); }
+  .kicker {
+    font-family: var(--f-mono);
+    font-size: var(--step--1);
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 1.6rem;
+  }
+  h1 {
+    font-family: var(--f-display);
+    font-weight: 700;
+    font-size: var(--step-4);
+    line-height: 1.02;
+    letter-spacing: -.02em;
+    margin: 0 0 1.4rem;
+    text-wrap: balance;
+    max-width: 30ch;
+  }
+  .standfirst {
+    font-size: var(--step-1);
+    color: var(--ink-soft);
+    max-width: 54ch;
+    margin: 0 0 2.4rem;
+    text-wrap: pretty;
+  }
+  .thesis {
+    border-left: 3px solid var(--accent);
+    padding: .1rem 0 .1rem 1.4rem;
+    margin: 0 0 2.6rem;
+    max-width: 56ch;
+  }
+  .thesis p { margin: 0; font-family: var(--f-display); font-style: italic; font-size: var(--step-1); color: var(--ink); }
+  .thesis cite { display: block; margin-top: .7rem; font: 500 var(--step--1)/1.5 var(--f-mono); font-style: normal; color: var(--muted); letter-spacing: .02em; }
+
+  .howto {
+    display: grid; gap: 1.4rem;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    border-top: 1px solid var(--hairline);
+    padding-top: 1.6rem;
+  }
+  .howto div p { margin: 0; }
+  .howto .lbl { font: 600 var(--step--1)/1.4 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-bottom: .45rem; }
+  .howto .txt { color: var(--muted); font-size: var(--step--1); }
+
+  /* ---- idea sections ---------------------------------------------- */
+  .idea {
+    display: grid;
+    grid-template-columns: 15rem minmax(0, 1fr);
+    gap: clamp(1.6rem, 4vw, 4rem);
+    padding: clamp(2.6rem, 7vh, 4.6rem) 0;
+    border-top: 1px solid var(--hairline);
+    scroll-margin-top: 1rem;
+  }
+  @media (max-width: 58rem) {
+    .idea { grid-template-columns: minmax(0, 1fr); gap: 1.5rem; }
+  }
+
+  .side { position: relative; }
+  @media (min-width: 58rem) {
+    .side { position: sticky; top: clamp(1.5rem, 6vh, 3.5rem); align-self: start; }
+  }
+  .eyebrow {
+    font: 500 var(--step--1)/1.5 var(--f-mono);
+    color: var(--muted);
+    letter-spacing: .04em;
+    margin: 0 0 .9rem;
+  }
+  .eyebrow b { color: var(--ink); font-weight: 600; }
+  /* the compressed form: the rule you carry */
+  .compressed {
+    margin: 0;
+    background: var(--surface);
+    border: 1px solid var(--hairline-2);
+    border-left: 3px solid var(--accent);
+    padding: .95rem 1.05rem;
+    font-family: var(--f-mono);
+    font-size: var(--step--1);
+    line-height: 1.55;
+    color: var(--ink);
+  }
+  .compressed .tag {
+    display: block;
+    font-size: .72rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: .5rem;
+  }
+
+  .body { min-width: 0; }
+  h2 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: var(--step-2);
+    line-height: 1.14;
+    letter-spacing: -.012em;
+    margin: 0 0 1rem;
+    text-wrap: balance;
+    max-width: 34ch;
+  }
+  .body > p { max-width: var(--measure); margin: 0 0 1.05rem; text-wrap: pretty; }
+  .body > p:last-child { margin-bottom: 0; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+  code {
+    font-family: var(--f-mono);
+    font-size: .88em;
+    background: var(--sunk);
+    border: 1px solid var(--hairline);
+    border-radius: 3px;
+    padding: .08em .34em;
+  }
+
+  /* verbatim sample lifted from the repo docs */
+  .sample {
+    margin: 1.5rem 0;
+    max-width: var(--measure);
+    background: var(--sunk);
+    border: 1px solid var(--hairline);
+    padding: 1.15rem 1.25rem .95rem;
+  }
+  .sample blockquote {
+    margin: 0;
+    font-family: var(--f-display);
+    font-size: var(--step-0);
+    line-height: 1.55;
+    color: var(--ink);
+  }
+  .sample blockquote p { margin: 0 0 .7rem; }
+  .sample blockquote p:last-child { margin: 0; }
+  .sample figcaption {
+    margin-top: .85rem; padding-top: .6rem;
+    border-top: 1px dashed var(--hairline-2);
+    font: 500 var(--step--1)/1.4 var(--f-mono);
+    color: var(--muted);
+  }
+
+  /* diagrams */
+  .diagram { margin: 1.8rem 0 0; }
+  .diagram > div { overflow-x: auto; }
+  .diagram svg {
+    display: block;
+    width: 100%;
+    max-width: 46rem;
+    height: auto;
+    min-width: 20rem;
+    color: var(--ink-soft);
+  }
+  .diagram figcaption {
+    margin-top: .8rem;
+    max-width: var(--measure);
+    font-size: var(--step--1);
+    color: var(--muted);
+  }
+  .s-lbl  { font: 500 12px var(--f-mono); fill: var(--ink); }
+  .s-mut  { font: 400 11px var(--f-mono); fill: var(--muted); }
+  .s-acc  { font: 600 12px var(--f-mono); fill: var(--accent); }
+  .s-ref  { font: 600 12px var(--f-mono); fill: var(--refute); }
+  .s-box  { fill: var(--surface); stroke: currentColor; stroke-width: 1.25; }
+  .s-line { stroke: currentColor; stroke-width: 1.25; fill: none; }
+
+  /* data table */
+  .tbl { margin: 1.5rem 0 0; overflow-x: auto; }
+  table { border-collapse: collapse; font-size: var(--step--1); min-width: 30rem; }
+  th, td { text-align: left; padding: .5rem .9rem .5rem 0; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+  th { font: 600 var(--step--1)/1.4 var(--f-mono); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  td.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; text-align: right; padding-right: 1.4rem; }
+  .yes { color: var(--accent); font-weight: 600; }
+  .no  { color: var(--refute); font-weight: 600; }
+
+  /* the recurring-move list */
+  .moves { margin: 1.5rem 0 0; padding: 0; list-style: none; display: grid; gap: .5rem; max-width: var(--measure); }
+  .moves li {
+    display: grid; grid-template-columns: 12.5rem minmax(0, 1fr); gap: .9rem;
+    padding: .55rem .8rem; background: var(--surface); border: 1px solid var(--hairline);
+    font-size: var(--step--1);
+  }
+  .moves code { background: none; border: 0; padding: 0; color: var(--accent); font-weight: 500; }
+  .moves span { color: var(--muted); }
+  @media (max-width: 34rem) { .moves li { grid-template-columns: minmax(0,1fr); gap: .15rem; } }
+
+  /* closing */
+  .close { padding: clamp(3rem, 9vh, 6rem) 0 clamp(4rem, 12vh, 8rem); border-top: 3px solid var(--accent); }
+  .close h2 { font-size: var(--step-3); max-width: 24ch; }
+  .last {
+    margin: 2rem 0 0; max-width: 48ch;
+    border-left: 3px solid var(--accent); padding-left: 1.4rem;
+  }
+  .last p { font-family: var(--f-display); font-size: var(--step-1); font-style: italic; margin: 0 0 .9rem; }
+  .last p:last-child { margin: 0; }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  .foot {
+    border-top: 1px solid var(--hairline);
+    padding: 1.6rem 0 3rem;
+    font: 400 var(--step--1)/1.6 var(--f-mono);
+    color: var(--muted);
+  }
+</style>
+
+<div class="rail-progress" aria-hidden="true"><span id="prog"></span></div>
+
+<main class="wrap">
+
+  <header class="masthead">
+    <p class="kicker">Choosing a programming language · the ideas worth keeping</p>
+    <h1>The Compression Thread</h1>
+    <p class="standfirst">
+      Fourteen ideas from the workshop, each one a short rule you can actually use, next to
+      the measurement that earned it. Every number here came from running the code — and you
+      can re-run all of it yourself.
+    </p>
+    <div class="thesis">
+      <p>Prediction and compression are mathematically two sides of the same coin — a good
+      model <em>is</em> a good compressor, and extracting structure from experience is what
+      learning is.</p>
+      <cite>Shannon, 1948 · by way of 3Blue1Brown, <i>Compression is Intelligence</i></cite>
+    </div>
+    <div class="howto">
+      <div>
+        <p class="lbl">How to read this</p>
+        <p class="txt">On the left of each section: the rule, short enough to remember. On the
+        right: the measurement or the code that earned it.</p>
+      </div>
+      <div>
+        <p class="lbl">The order means something</p>
+        <p class="txt">It starts with how to measure honestly, then moves to what the
+        measurements turn out to mean. Read straight through, or jump to what you need.</p>
+      </div>
+      <div>
+        <p class="lbl">Check it yourself</p>
+        <p class="txt">Nothing here has to be taken on trust. <code>make bench</code> runs the
+        benchmarks, <code>make verify</code> runs every demo, on your machine.</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============================================================ 1 -->
+  <section class="idea" id="one-idea" tabindex="-1">
+    <div class="side">
+      <p class="eyebrow"><b>Block 0</b> · README</p>
+      <p class="compressed"><span class="tag">The rule</span>
+        There is no fastest language. There are only workloads, and each language is a
+        different bet about which resource is scarce.</p>
+    </div>
+    <div class="body">
+      <h2>Ban the question that has no answer</h2>
+      <p>
+        “Which language is fastest?” sounds like it should have an answer. It doesn’t — because
+        the question assumes there is only one thing you can run short of. There are at least
+        five: CPU time, memory, startup time, developer time, and the cost of being wrong.
+      </p>
+      <p>
+        Each language is a bet about which of those runs out first. Python bet that a simple
+        interpreter plus fast C libraries beats raw speed. Go bet that concurrency should be
+        too cheap to think about. Rust bet that the compiler should prove your sharing is safe.
+        Java bet on real threads and a carefully specified memory model. None of those bets is
+        wrong — they answer different questions. The only real mistake is picking a language
+        whose bet doesn’t match the thing <em>you</em> are short of.
+      </p>
+      <p>
+        Which is why the four benchmark workloads in this repo were chosen to
+        <strong>disagree with each other</strong>. A suite where one language wins everything
+        teaches nothing. A suite that reorders itself per workload teaches the whole lesson.
+      </p>
+      <div class="tbl">
+        <table>
+          <caption class="s-mut" style="text-align:left;padding-bottom:.6rem;color:var(--muted);font-family:var(--f-mono)">Same five languages, four workloads, four different winners</caption>
+          <thead>
+            <tr><th>Workload</th><th>Stresses</th><th>Fastest here</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>mandelbrot</code></td><td>tight float loops, zero allocation</td><td class="yes">Go</td></tr>
+            <tr><td><code>binarytrees</code></td><td>millions of tiny objects, GC pressure</td><td class="yes">TypeScript</td></tr>
+            <tr><td><code>wordfreq</code></td><td>file I/O, strings, hash maps, sort</td><td class="yes">Rust, then Go, then <em>Python</em></td></tr>
+            <tr><td><code>startup</code></td><td>process spawn + runtime boot</td><td class="yes">Go / Rust, ~1.5 ms</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ 2 -->
+  <section class="idea" id="rumour" tabindex="-1">
+    <div class="side">
+      <p class="eyebrow"><b>Block 0</b> · README · tools/bench.py</p>
+      <p class="compressed"><span class="tag">The rule</span>
+        A benchmark you have not verified is a rumour.</p>
+    </div>
+    <div class="body">
+      <h2>Why you can trust these numbers</h2>
+      <p>
+        Anyone can produce a table. What makes this one a result rather than a rumour is the
+        procedure: the same algorithm in every language, wall time <em>and</em> CPU time
+        <em>and</em> peak memory, the median of several runs rather than the average, the first
+        warm-up run thrown away — and then the step almost nobody bothers with, which is
+        <strong>checking that all five programs produced byte-for-byte identical output</strong>.
+      </p>
+      <p>
+        That last check is what makes the numbers worth arguing about. Without it you can’t
+        tell “this language is fast” apart from “this version skipped some work” — and the
+        fastest program in any benchmark is always the one quietly computing the wrong answer.
+      </p>
+      <figure class="sample">
+        <blockquote>
+          <p>Per language the harness records <strong>wall time, CPU time and peak RSS</strong>,
+          takes the median of N repetitions, and <strong>verifies that every language produced
+          byte-identical output</strong>. A benchmark you have not verified is a rumour.</p>
+        </blockquote>
+        <figcaption>README.md · “What gets measured”</figcaption>
+      </figure>
+      <p>
+        The same discipline is what makes it possible to say, honestly, which of the things you
+        have been told about languages are real and which are inherited noise:
+      </p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Claim</th><th>Verdict</th></tr></thead>
+          <tbody>
+            <tr><td>“Compiled languages are faster than JIT languages”</td><td><span class="no">Folklore.</span> Java’s steady state beat Rust, 2.9 ms vs 3.1 ms. The JIT’s problem is time-to-peak, not peak.</td></tr>
+            <tr><td>“Garbage collection makes a language slow”</td><td><span class="no">Folklore.</span> Java <em>allocated faster than Rust</em>. GC costs memory and tail latency, not throughput.</td></tr>
+            <tr><td>“Turning the GC off makes it faster”</td><td><span class="no">False.</span> <code>GOGC=off</code> was 4.6× <em>slower</em> — the heap sprawls out of cache.</td></tr>
+            <tr><td>“TypeScript makes JavaScript type-safe at run time”</td><td><span class="no">False.</span> Types are erased; one line proves it.</td></tr>
+            <tr><td>“Static types prevent bugs”</td><td><span class="yes">Real, but bounded.</span> They protect the inside of your program, not its boundary.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ 3 -->
+  <section class="idea" id="data" tabindex="-1">
+    <div class="side">
+      <p class="eyebrow"><b>Block 0b</b> · docs/11</p>
+      <p class="compressed"><span class="tag">The rule</span>
+        A benchmark without its dataset is not a result. It is an anecdote with numbers
+        attached.</p>
+    </div>
+    <div class="body">
+      <h2>The data is the workload</h2>
+      <p>
+        The sharpest single experiment in the repo runs one unchanged benchmark —
+        <code>wordfreq</code> — over two different corpora: a synthetic generated word list,
+        and three million words of real English narration from 3Blue1Brown transcripts. Same
+        code, same machine, same harness. <strong>The ranking changes.</strong>
+      </p>
+      <p>
+        Nothing about the program changed. What changed was the shape of the data. In real
+        English a handful of words appear constantly and thousands appear once or twice — a long
+        tail of rare words. That changes how often hash map keys collide, how much memory gets
+        allocated, and how well the CPU cache does its job. A language that looked fastest on
+        tidy synthetic data was not fastest on the messy data anyone actually has.
+      </p>
+      <figure class="sample">
+        <blockquote>
+          <p>If a change of dataset can reorder your benchmark, then a benchmark without its
+          dataset is not a result. It is an anecdote with numbers attached.</p>
+        </blockquote>
+        <figcaption>docs/11-the-data-is-the-workload.md</figcaption>
+      </figure>
+      <p>
+        This is also where the repo’s title stops being a slogan. Counting token frequencies
+        <em>is</em> the front end of every compressor ever written, and the entropy of that
+        frequency table is exactly what Shannon’s argument is about. The benchmark and the
+        thesis are the same computation.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================ 4 -->
+  <section class="idea" id="question-five" tabindex="-1">
+    <div class="side">
+      <p class="eyebrow"><b>Block 6</b> · docs/00 — the handout</p>
+      <p class="compressed"><span class="tag">The rule</span>
+        Performance is question five. Teams that ask it first usually pick wrong.</p>
+    </div>
+    <div class="body">
+      <h2>Ask the questions in the right order</h2>
+      <p>
+        The deliverable of the whole session is a decision order, and the ordering is the
+        content. Four questions come before speed, and each dominates it more often than
+        engineers expect:
+      </p>
+      <ul class="moves">
+        <li><code>1 · Fluency</code><span>A language the team knows beats a faster one they are learning — by a wider margin than any benchmark here.</span></li>
+        <li><code>2 · Ecosystem</code><span>ML is Python, browsers are TS, cluster tooling is Go. Fighting this means writing bindings forever.</span></li>
+        <li><code>3 · Cost of failure</code><span>Static typing is insurance, worth buying in proportion to the loss. Rust’s strictness is a bargain when someone can lose money or their life.</span></li>
+        <li><code>4 · Execution shape</code><span>Short-lived and cold-start-bound, or long-lived and warm? This is where AOT vs JIT finally pays off.</span></li>
+        <li><code>5 · Is it CPU-bound?</code><span>Only now. Most services are waiting, not computing — and for those, execution speed is nearly irrelevant.</span></li>
+      </ul>
+      <p>
+        Question five carries its own evidence against itself. In <code>wordfreq</code> —
+        the workload closest to real business code — Python is competitive with Java and
+        beats TypeScript, despite being an order of magnitude slower at raw loops, because
+        the hot path is <code>str.split</code> and <code>Counter</code>, which are C. A
+        language 40× faster on paper makes a 2 ms difference inside a 200 ms request that
+        spends 190 ms waiting on a database.
+      </p>
+      <p>
+        So the useful question is never “which language is fast”. It is
+        <strong>which 5% of my code is hot, and can I make just that part fast</strong> —
+        which very often you can, without changing language at all.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================ 5 -->
+  <section class="idea" id="in-the-type" tabindex="-1">
+    <div class="side">
+      <p class="eyebrow"><b>Blocks 1, 2b, 4, 5b</b> · the recurring move</p>
+      <p class="compressed"><span class="tag">The rule</span>
+        Put the strategy in the type, and the invalid state stops being unlikely — it becomes
+        impossible to write down.</p>
+    </div>
+    <div class="body">
+      <h2>The same move, seven times, in different disguises</h2>
+      <p>
+        One move keeps reappearing across the whole workshop under different names. Every time,
+        a rule that used to live in a comment, a convention, or somebody’s memory gets moved
+        into the type system — where the compiler enforces it for free, forever, on everyone.
+      </p>
+      <ul class="moves">
+        <li><code>Option&lt;T&gt;</code><span>Rust: absence is a different type from presence, so you cannot forget to check.</span></li>
+        <li><code>String?</code><span>Kotlin: nullable and non-null are distinct types. Java’s <code>String</code> is both, silently.</span></li>
+        <li><code>@tailrec</code><span>Scala: not an optimisation — an <em>assertion</em>. A silent stack-overflow cliff becomes a compile error.</span></li>
+        <li><code>Mutex&lt;T&gt;</code><span>The data lives inside the lock, so you cannot read it without locking or forget to unlock.</span></li>
+        <li><code>Send + Sync</code><span>“Safe to move between threads” and “safe to share” become properties the compiler checks.</span></li>
+        <li><code>final</code> fields<span>A bean with no post-construction writes is a pure function — thread safety by construction, no framework involved.</span></li>
+        <li><code>CHECK</code> constraint<span>The database refuses to store the invalid row, whichever service forgot to validate.</span></li>
+      </ul>
+      <p>
+        All seven are the same trick, and it is worth naming. A convention you have to remember
+        at forty call sites is stored forty times, and any one of them can be forgotten. The
+        same rule written once, in a type, is stored once — shorter, and now impossible to skip.
+        That is <strong>compression</strong> in the exact sense this workshop keeps returning
+        to, and it is why understanding a rule well enough to encode it is the same work as
+        being able to state it briefly.
+      </p>
+      <figure class="sample">
+        <blockquote>
+          <p>You cannot read the <code>u64</code> without locking, because the <code>u64</code>
+          is <em>inside</em> the <code>Mutex</code>. In Go and Java that knowledge lives in a
+          comment or in someone’s head.</p>
+        </blockquote>
+        <figcaption>docs/06-concurrency.md · Part 2</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ============================================================ 6 -->
+  <section class="idea" id="samples-proofs" tabindex="-1">
+    <div class="side">
+      <p class="eyebrow"><b>Block 7</b> · docs/08</p>
+      <p class="compressed"><span class="tag">The rule</span>
+        Tests sample. Types prove. Know which one you are holding.</p>
+    </div>
+    <div class="body">
+      <h2>Why that move matters more than it looks</h2>
+      <p>
+        Dijkstra, in <i>Notes on Structured Programming</i> (1970):
+        <strong>“Program testing can be used to show the presence of bugs, but never to show
+        their absence.”</strong> This is not a complaint about lazy tests. It is a lopsidedness
+        you cannot engineer around. One failing test settles the question: a bug exists. A
+        million passing tests settle nothing about the opposite, because you checked a million
+        inputs out of a vastly larger number and then generalised from them.
+      </p>
+      <p>
+        Philosophers of science ran into the same wall, and Karl Popper gave it a name: you can
+        disprove a claim with a single counterexample, but you can never prove it by collecting
+        more examples. Disproof is final. Confirmation never is.
+      </p>
+      <figure class="diagram">
+        <div>
+          <svg viewBox="0 0 720 250" role="img" aria-label="Two panels over the same input space. On the left, a test suite checks five sampled points and misses a bug elsewhere in the space. On the right, a type excludes an entire region of the space, so the bug cannot be expressed at all.">
+            <!-- LEFT: tests sample -->
+            <text x="8" y="18" class="s-lbl">A test suite</text>
+            <text x="8" y="35" class="s-mut">checks the points it visits</text>
+            <rect x="8" y="46" width="320" height="150" class="s-box"/>
+            <text x="14" y="210" class="s-mut">input space</text>
+            <!-- unsampled points -->
+            <g fill="currentColor" opacity=".26">
+              <circle cx="45"  cy="72"  r="3.2"/><circle cx="95"  cy="66"  r="3.2"/>
+              <circle cx="150" cy="80"  r="3.2"/><circle cx="205" cy="68"  r="3.2"/>
+              <circle cx="262" cy="76"  r="3.2"/><circle cx="305" cy="92"  r="3.2"/>
+              <circle cx="60"  cy="112" r="3.2"/><circle cx="120" cy="104" r="3.2"/>
+              <circle cx="232" cy="110" r="3.2"/><circle cx="288" cy="126" r="3.2"/>
+              <circle cx="42"  cy="152" r="3.2"/><circle cx="100" cy="164" r="3.2"/>
+              <circle cx="160" cy="146" r="3.2"/><circle cx="215" cy="158" r="3.2"/>
+              <circle cx="270" cy="170" r="3.2"/><circle cx="310" cy="150" r="3.2"/>
+              <circle cx="75"  cy="186" r="3.2"/><circle cx="185" cy="188" r="3.2"/>
+            </g>
+            <!-- sampled points -->
+            <g fill="var(--accent)">
+              <circle cx="70"  cy="90"  r="5.4"/><circle cx="140" cy="122" r="5.4"/>
+              <circle cx="196" cy="92"  r="5.4"/><circle cx="248" cy="140" r="5.4"/>
+              <circle cx="300" cy="112" r="5.4"/>
+            </g>
+            <text x="20" y="240" class="s-acc">5 assertions = 5 points</text>
+            <!-- the bug -->
+            <circle cx="118" cy="176" r="6" fill="var(--refute)"/>
+            <line x1="118" y1="176" x2="176" y2="214" class="s-line" stroke="var(--refute)"/>
+            <text x="180" y="230" class="s-ref">the bug you did not sample</text>
+
+            <!-- RIGHT: types prove -->
+            <text x="392" y="18" class="s-lbl">A type</text>
+            <text x="392" y="35" class="s-mut">removes a region of the space</text>
+            <rect x="392" y="46" width="320" height="150" class="s-box"/>
+            <!-- excluded region -->
+            <path d="M392 130 L712 100 L712 196 L392 196 Z" fill="var(--refute)" opacity=".13"/>
+            <path d="M392 130 L712 100" class="s-line" stroke="var(--refute)" stroke-dasharray="6 4"/>
+            <g fill="currentColor" opacity=".26">
+              <circle cx="430" cy="72"  r="3.2"/><circle cx="480" cy="66"  r="3.2"/>
+              <circle cx="535" cy="80"  r="3.2"/><circle cx="590" cy="68"  r="3.2"/>
+              <circle cx="647" cy="76"  r="3.2"/><circle cx="690" cy="62"  r="3.2"/>
+              <circle cx="445" cy="112" r="3.2"/><circle cx="505" cy="104" r="3.2"/>
+              <circle cx="617" cy="96"  r="3.2"/><circle cx="672" cy="88"  r="3.2"/>
+            </g>
+            <text x="404" y="172" class="s-ref">not expressible</text>
+            <text x="404" y="188" class="s-mut">the compiler rejects the program</text>
+            <g>
+              <circle cx="503" cy="176" r="6" fill="none" stroke="var(--refute)" stroke-width="1.5"/>
+              <line x1="498" y1="171" x2="508" y2="181" class="s-line" stroke="var(--refute)"/>
+              <line x1="508" y1="171" x2="498" y2="181" class="s-line" stroke="var(--refute)"/>
+            </g>
+            <text x="404" y="240" class="s-acc">one rule, whole region gone</text>
+          </svg>
+        </div>
+        <figcaption>
+          A test checks the points it visits, so coverage is always a fraction of the space.
+          A type deletes a region of the space — which is why <code>Mutex&lt;T&gt;</code> and
+          <code>Option&lt;T&gt;</code> do something a test suite structurally cannot.
+        </figcaption>
+      </figure>
+      <p>
+        The part usually left out when this quote gets used: Dijkstra was <em>not</em> arguing
+        for less testing, and he would almost certainly have disliked TDD. He wanted correctness
+        worked out on paper alongside the code — “let correctness proof and program grow hand in
+        hand” — and thought a testing-first approach was hopelessly inadequate. He is here as
+        the honest limit on the next idea, not as its supporter.
+      </p>
+      <p>
+        Most of the industry did not take the mathematical-proof road. What it built instead is
+        a range of options, and one of them is something you already use every day without
+        thinking of it as proof:
+      </p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Instrument</th><th>What it establishes</th></tr></thead>
+          <tbody>
+            <tr><td>Example test</td><td>one point in the input space</td></tr>
+            <tr><td>Property-based test</td><td>a universal claim, <em>sampled</em> — with shrinking to minimise the counterexample</td></tr>
+            <tr><td>Fuzzing</td><td>adversarial, coverage-guided sampling</td></tr>
+            <tr><td>Model checking</td><td><span class="yes">proof</span>, exhaustive within a bounded model</td></tr>
+            <tr><td><strong>Type system</strong></td><td><span class="yes">proof</span>, machine-checked, of a limited class of properties</td></tr>
+            <tr><td>Dependent / refinement types</td><td><span class="yes">proof</span> of arbitrary properties, at high cost</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Which means the move in the previous section is not a matter of taste. Every time you
+        push a rule into a type, you move it out of the “we tested some cases” column and into
+        the “the compiler checked every case” column. That is Dijkstra’s idea, at a size you can
+        actually use on Monday morning.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================ 7 -->
+  <section class="idea" id="waiting" tabindex="-1">
+    <div class="side">
+      <p class="eyebrow"><b>Block 4</b> · docs/06 · docs/12</p>
+      <p class="compressed"><span class="tag">The rule</span>
+        Are you waiting, or are you computing? Almost every concurrency argument dissolves
+        once somebody answers that.</p>
+    </div>
+    <div class="body">
+      <h2>One question resolves the whole concurrency aisle</h2>
+      <p>
+        Concurrency is <em>dealing with</em> many things at once — a way of structuring a
+        program. Parallelism is <em>doing</em> many things at once — a property of the
+        hardware. Fusing those two words is the source of most <code>async</code> misuse in
+        the industry, and separating them takes one question.
+      </p>
+      <figure class="diagram">
+        <div>
+          <svg viewBox="0 0 720 236" role="img" aria-label="Two four-lane timelines. In the I/O-bound case each lane is mostly blocked with a small sliver of work, so adding more concurrent tasks increases throughput. In the CPU-bound case all four lanes are fully saturated with work, so adding threads adds nothing.">
+            <!-- I/O bound -->
+            <text x="8" y="18" class="s-lbl">Waiting · I/O-bound</text>
+            <text x="8" y="35" class="s-mut">4 threads, each blocked 50 ms on a database</text>
+            <g>
+              <rect x="8"  y="46" width="560" height="16" class="s-box"/>
+              <rect x="8"  y="46" width="26"  height="16" fill="var(--accent)" stroke="none"/>
+              <rect x="8"  y="68" width="560" height="16" class="s-box"/>
+              <rect x="8"  y="68" width="26"  height="16" fill="var(--accent)" stroke="none"/>
+              <rect x="8"  y="90" width="560" height="16" class="s-box"/>
+              <rect x="8"  y="90" width="26"  height="16" fill="var(--accent)" stroke="none"/>
+              <rect x="8"  y="112" width="560" height="16" class="s-box"/>
+              <rect x="8"  y="112" width="26" height="16" fill="var(--accent)" stroke="none"/>
+            </g>
+            <text x="42" y="59" class="s-mut">blocked — the core is idle, the thread is not</text>
+            <text x="580" y="90" class="s-acc">more</text>
+            <text x="580" y="106" class="s-acc">concurrency</text>
+            <text x="580" y="122" class="s-acc">helps</text>
+
+            <!-- CPU bound -->
+            <text x="8" y="164" class="s-lbl">Computing · CPU-bound</text>
+            <text x="8" y="181" class="s-mut">4 cores, saturated</text>
+            <g>
+              <rect x="8" y="192" width="560" height="9" class="s-box"/>
+              <rect x="8" y="192" width="560" height="9" fill="var(--accent)" stroke="none" opacity=".82"/>
+              <rect x="8" y="204" width="560" height="9" class="s-box"/>
+              <rect x="8" y="204" width="560" height="9" fill="var(--accent)" stroke="none" opacity=".82"/>
+              <rect x="8" y="216" width="560" height="9" class="s-box"/>
+              <rect x="8" y="216" width="560" height="9" fill="var(--accent)" stroke="none" opacity=".82"/>
+              <rect x="8" y="228" width="560" height="6" class="s-box"/>
+              <rect x="8" y="228" width="560" height="6" fill="var(--accent)" stroke="none" opacity=".82"/>
+            </g>
+            <text x="580" y="204" class="s-ref">more threads</text>
+            <text x="580" y="220" class="s-ref">add nothing</text>
+          </svg>
+        </div>
+        <figcaption>
+          Virtual threads make blocking cheap; they do not make computing faster. Measured:
+          <strong>15.2× faster</strong> on 10,000 blocking I/O tasks, <strong>1.02×</strong>
+          on CPU work — the same cores, the same arithmetic.
+        </figcaption>
+      </figure>
+      <p>
+        The flattest row in the whole suite is Python threads on four cores:
+        <strong>0.94×</strong> — very slightly <em>slower</em> than using one thread. That row
+        is the GIL, which lets only one thread run Python code at a time, so extra threads take
+        turns instead of running together. Python <em>processes</em> on the same machine reach
+        2.64×, because each process gets its own interpreter and its own GIL — paid for with
+        startup cost and copying every argument and result between processes.
+      </p>
+      <p>
+        Notice that nobody reaches 4.00× on four cores. Memory bandwidth, one-time setup and
+        thread startup all take a cut, and that shortfall has a name:
+        <strong>Amdahl’s law</strong>. Whatever part of your program has to run in sequence sets
+        a hard ceiling on how much faster it can ever get. If a tenth of your program is
+        sequential, your ceiling is 10× even on infinite cores — and on four cores you only get
+        3.1×. Halving that sequential tenth is worth more than any number of extra cores you
+        could buy.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================ 8 -->
+  <section class="idea" id="crossover" tabindex="-1">
+    <div class="side">
+      <p class="eyebrow"><b>Block 4b</b> · docs/09</p>
+      <p class="compressed"><span class="tag">The rule</span>
+        N × cost-per-element must greatly exceed ~100 µs of setup. If you cannot say how long
+        your operation takes, you cannot say whether to parallelise it.</p>
+    </div>
+    <div class="body">
+      <h2>Parallelism has a fixed price, paid before any of your work happens</h2>
+      <p>
+        <code>list.parallelStream()</code> is one word longer than <code>list.stream()</code>.
+        That is the entire problem: the cost is invisible at the call site. Before a single
+        element of your work runs, you pay for splitting the source, dispatching tasks to the
+        ForkJoinPool and waking its workers, memory barriers between cores, combining partial
+        results, and stragglers — because wall time is the <em>maximum</em> over workers, not
+        the mean.
+      </p>
+      <p>
+        That cost is roughly constant. Your work is proportional to N. Two lines, one flat and
+        one rising — so there is always a crossover, and below it you are purchasing overhead.
+      </p>
+      <figure class="diagram">
+        <div>
+          <svg viewBox="0 0 720 260" role="img" aria-label="A graph of time against total work. The sequential line rises from the origin. The parallel line starts at a fixed setup cost of about 100 microseconds and rises more slowly, crossing the sequential line. Left of the crossing parallel loses; right of it parallel wins.">
+            <!-- axes -->
+            <line x1="70" y1="24" x2="70" y2="206" class="s-line"/>
+            <line x1="70" y1="206" x2="690" y2="206" class="s-line"/>
+            <text x="70" y="228" class="s-mut">total work  =  N × cost per element  →</text>
+            <text x="14" y="34" class="s-mut">time</text>
+
+            <!-- loses / wins shading -->
+            <rect x="70" y="24" width="300" height="182" fill="var(--refute)" opacity=".07"/>
+            <rect x="370" y="24" width="320" height="182" fill="var(--accent)" opacity=".08"/>
+            <line x1="370" y1="24" x2="370" y2="206" class="s-line" stroke-dasharray="5 4" opacity=".7"/>
+            <text x="180" y="46" class="s-ref" text-anchor="middle">parallel LOSES</text>
+            <text x="530" y="46" class="s-acc" text-anchor="middle">parallel WINS</text>
+            <text x="370" y="248" class="s-lbl" text-anchor="middle">crossover</text>
+
+            <!-- sequential -->
+            <line x1="70" y1="206" x2="660" y2="60" class="s-line" stroke-width="1.75"/>
+            <text x="600" y="52" class="s-lbl">sequential</text>
+
+            <!-- parallel: fixed offset, shallower slope -->
+            <line x1="70" y1="150" x2="660" y2="112" class="s-line" stroke="var(--accent)" stroke-width="2.25"/>
+            <text x="600" y="132" class="s-acc">parallel</text>
+
+            <!-- fixed cost bracket -->
+            <line x1="70" y1="150" x2="52" y2="150" class="s-line" opacity=".6"/>
+            <line x1="52" y1="150" x2="52" y2="206" class="s-line" opacity=".6"/>
+            <line x1="52" y1="206" x2="70" y2="206" class="s-line" opacity=".6"/>
+            <text x="86" y="172" class="s-mut">fixed cost ≈ 100 µs</text>
+            <text x="86" y="188" class="s-mut">split · dispatch · barriers · combine</text>
+
+            <!-- crossing marker -->
+            <circle cx="370" cy="131" r="4.5" fill="var(--accent)"/>
+          </svg>
+        </div>
+        <figcaption>
+          The crossover is not at a fixed element count — it is at a fixed amount of
+          <em>total work</em>. Cheap work crossed over near 1,000,000 elements; expensive work
+          crossed near 10,000. A <strong>100× difference</strong>, driven entirely by
+          cost-per-element.
+        </figcaption>
+      </figure>
+      <p>
+        At 10,000 cheap elements, <code>parallelStream()</code> measured
+        <strong>16× slower</strong> than the plain sequential version. That is the number worth
+        remembering — and the reason the rule is written in terms of total work rather than
+        number of items.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================ 9 -->
+  <section class="idea" id="defaults" tabindex="-1">
+    <div class="side">
+      <p class="eyebrow"><b>Block 4c</b> · docs/09 · docs/13</p>
+      <p class="compressed"><span class="tag">The rule</span>
+        Mutability is the root problem. Concurrency is only the fastest way to get caught —
+        and the language’s <em>default</em> decides whether you get caught at all.</p>
+    </div>
+    <div class="body">
+      <h2>The default is what breaks you</h2>
+      <p>
+        The demo is four lines that pass code review in any company: a
+        <code>private final List&lt;String&gt; items = new ArrayList&lt;&gt;()</code> field on
+        a controller, appended to inside a request handler. A field is shared by every request
+        thread. <code>ArrayList</code> is not thread-safe. That is the whole bug.
+      </p>
+      <p>
+        Twenty users, 200,000 appends over real HTTP: <strong>3,874 items vanished</strong>.
+        Nothing threw. Nothing logged. The API returned <code>204 No Content</code> to every
+        single caller, all of whom believe their item was saved.
+      </p>
+      <figure class="diagram">
+        <div>
+          <svg viewBox="0 0 720 200" role="img" aria-label="Two paths for the same shared-mutable-state bug. In Java the program compiles, deploys, serves HTTP 204 to every caller and silently loses 3874 items in production. In Rust the equivalent program is rejected by the compiler before it can run.">
+            <defs>
+              <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+              </marker>
+            </defs>
+            <!-- java path -->
+            <text x="8" y="18" class="s-lbl">Java · shared <tspan class="s-lbl">ArrayList</tspan> field</text>
+            <g>
+              <rect x="8" y="32" width="104" height="38" class="s-box"/>
+              <text x="60" y="55" class="s-lbl" text-anchor="middle">compiles</text>
+              <line x1="112" y1="51" x2="146" y2="51" class="s-line" marker-end="url(#ar)"/>
+              <rect x="150" y="32" width="104" height="38" class="s-box"/>
+              <text x="202" y="55" class="s-lbl" text-anchor="middle">deploys</text>
+              <line x1="254" y1="51" x2="288" y2="51" class="s-line" marker-end="url(#ar)"/>
+              <rect x="292" y="32" width="118" height="38" class="s-box"/>
+              <text x="351" y="49" class="s-lbl" text-anchor="middle">HTTP 204</text>
+              <text x="351" y="63" class="s-mut" text-anchor="middle">to every caller</text>
+              <line x1="410" y1="51" x2="444" y2="51" class="s-line" marker-end="url(#ar)" stroke="var(--refute)"/>
+              <rect x="448" y="26" width="180" height="50" class="s-box" stroke="var(--refute)"/>
+              <text x="538" y="46" class="s-ref" text-anchor="middle">3,874 items lost</text>
+              <text x="538" y="62" class="s-mut" text-anchor="middle">no exception, no log entry</text>
+            </g>
+            <text x="8" y="96" class="s-mut">you find out from a customer, weeks later</text>
+
+            <!-- rust path -->
+            <text x="8" y="136" class="s-lbl">Rust · the same design</text>
+            <g>
+              <rect x="8" y="150" width="104" height="38" class="s-box"/>
+              <text x="60" y="173" class="s-lbl" text-anchor="middle">compiles?</text>
+              <line x1="112" y1="169" x2="146" y2="169" class="s-line" stroke="var(--accent)" marker-end="url(#ar)"/>
+              <rect x="150" y="144" width="260" height="50" class="s-box" stroke="var(--accent)"/>
+              <text x="280" y="164" class="s-acc" text-anchor="middle">E0382: use of moved value</text>
+              <text x="280" y="180" class="s-mut" text-anchor="middle">the program never runs</text>
+              <line x1="410" y1="169" x2="444" y2="169" class="s-line" stroke-dasharray="4 4" opacity=".45"/>
+              <text x="452" y="166" class="s-mut">production</text>
+              <text x="452" y="181" class="s-mut">never sees it</text>
+            </g>
+          </svg>
+        </div>
+        <figcaption>
+          Java has good answers too — <code>ConcurrentLinkedQueue</code> was both correct
+          <em>and</em> fastest here, at 143 ms. The difference is not capability, it is the
+          <strong>default</strong>: Java’s default is a data structure that quietly breaks.
+        </figcaption>
+      </figure>
+      <p>
+        And “use a thread-safe collection” is the wrong lesson on its own, because thread-safe
+        is not one property. <code>CopyOnWriteArrayList</code> is genuinely correct and was
+        <strong>112× slower</strong> than <code>ConcurrentLinkedQueue</code> on this
+        write-heavy path, because every write copies the whole array. The real question is
+        always <em>thread-safe for what access pattern, at what cost</em> — and no collection
+        saves you from a compound operation like
+        <code>if (!list.contains(x)) list.add(x)</code>, which is two atomic calls and one
+        race.
+      </p>
+      <p>
+        The programming-style block then shows the same hazard with the threads removed: an
+        ordinary <code>@Service</code> with one mutable <code>int</code> counter loses hundreds
+        of thousands of increments under concurrent requests, while the identical bean built
+        from <code>final</code> fields is a pure function that Spring can safely share with
+        every request thread at once. Same container, same annotations. One field decides.
+        <strong>Spring’s container cannot see the difference. You have to.</strong>
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================ 10 -->
+  <section class="idea" id="queue" tabindex="-1">
+    <div class="side">
+      <p class="eyebrow"><b>Block 4d, 5b</b> · docs/12 · docs/10</p>
+      <p class="compressed"><span class="tag">The rule</span>
+        Bigger pools move the queue; they do not remove it. Every fixed-capacity resource
+        behind a queue has a knee.</p>
+    </div>
+    <div class="body">
+      <h2>What frameworks and pools actually cost</h2>
+      <p>
+        Two measurements here take aim at the same instinct — that a performance problem is a
+        number you can turn up.
+      </p>
+      <p>
+        First, the framework. The <code>startup</code> benchmark measures a floor: a JVM that
+        loads one class, ~46 ms. Nobody ships that. A real Spring Boot app with four
+        endpoints, no security, no JPA, no Kafka and no service mesh took <strong>4,475 ms to
+        first 200</strong> — roughly <strong>97× the bare JVM</strong>. That number is what
+        decides whether Lambda needs SnapStart, how long a rolling deploy takes, how fast an
+        autoscaler can answer a spike, and what your Kubernetes <code>startupProbe</code>
+        threshold has to be. Most teams have never measured it.
+      </p>
+      <p>
+        Second, the pool. Tomcat’s default of 200 request threads is a number almost nobody
+        chose, and it is a hard ceiling on in-flight requests. Raising it from 10 to 200 buys
+        real throughput here — 96 r/s to 725 r/s — because those threads are sleeping, not
+        computing. Which is exactly why the answer flips for CPU work, and exactly why the
+        database block’s pool of 200 was a disaster:
+      </p>
+      <figure class="diagram">
+        <div>
+          <svg viewBox="0 0 720 224" role="img" aria-label="Two rows showing the same requests reaching a database of fixed capacity. With a small pool the queue forms in front of the pool. With a large pool the queue relocates to the database itself, which still has the same capacity, so latency rises without throughput improving.">
+            <defs>
+              <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+              </marker>
+            </defs>
+            <!-- row 1 -->
+            <text x="8" y="18" class="s-lbl">Pool of 8</text>
+            <g fill="currentColor" opacity=".4">
+              <circle cx="16" cy="48" r="4"/><circle cx="30" cy="48" r="4"/><circle cx="44" cy="48" r="4"/>
+              <circle cx="58" cy="48" r="4"/><circle cx="72" cy="48" r="4"/><circle cx="86" cy="48" r="4"/>
+            </g>
+            <text x="8" y="72" class="s-mut">queue here</text>
+            <line x1="100" y1="48" x2="140" y2="48" class="s-line" marker-end="url(#ar2)"/>
+            <rect x="144" y="30" width="96" height="36" class="s-box"/>
+            <text x="192" y="52" class="s-lbl" text-anchor="middle">pool · 8</text>
+            <line x1="240" y1="48" x2="280" y2="48" class="s-line" marker-end="url(#ar2)"/>
+            <rect x="284" y="30" width="120" height="36" class="s-box" stroke="var(--accent)"/>
+            <text x="344" y="52" class="s-acc" text-anchor="middle">database</text>
+            <text x="420" y="44" class="s-acc">1.00× throughput</text>
+            <text x="420" y="60" class="s-mut">p50 baseline</text>
+
+            <!-- row 2 -->
+            <text x="8" y="130" class="s-lbl">Pool of 200</text>
+            <line x1="100" y1="160" x2="140" y2="160" class="s-line" marker-end="url(#ar2)"/>
+            <text x="8" y="184" class="s-mut">no queue here</text>
+            <rect x="144" y="142" width="96" height="36" class="s-box"/>
+            <text x="192" y="164" class="s-lbl" text-anchor="middle">pool · 200</text>
+            <!-- queue relocated -->
+            <g fill="var(--refute)" opacity=".75">
+              <circle cx="250" cy="160" r="4"/><circle cx="262" cy="160" r="4"/><circle cx="274" cy="160" r="4"/>
+              <circle cx="250" cy="148" r="4"/><circle cx="262" cy="148" r="4"/><circle cx="274" cy="148" r="4"/>
+              <circle cx="250" cy="172" r="4"/><circle cx="262" cy="172" r="4"/><circle cx="274" cy="172" r="4"/>
+            </g>
+            <text x="246" y="196" class="s-ref">queue moved here</text>
+            <rect x="284" y="142" width="120" height="36" class="s-box" stroke="var(--accent)"/>
+            <text x="344" y="164" class="s-acc" text-anchor="middle">database</text>
+            <text x="344" y="212" class="s-mut" text-anchor="middle">same capacity as before</text>
+            <text x="420" y="156" class="s-ref">0.38× throughput</text>
+            <text x="420" y="172" class="s-ref">70× the p50 latency</text>
+          </svg>
+        </div>
+        <figcaption>
+          A pool of 200 bought <strong>0.38× the throughput for 70× the latency</strong>. And
+          virtual threads do not help: ten thousand of them reaching for a Hikari pool of ten
+          have moved the queue, not removed it — <em>they will not make it eleven</em>.
+        </figcaption>
+      </figure>
+      <p>
+        The uncomfortable corollary is that your 200-thread pool was also an accidental rate
+        limiter. It guaranteed you never had more than 200 requests concurrently hammering a
+        downstream service. Remove that ceiling without adding a deliberate limit, and the
+        next bottleneck finds out the hard way.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================ 11 -->
+  <section class="idea" id="ladder" tabindex="-1">
+    <div class="side">
+      <p class="eyebrow"><b>Block 7</b> · docs/08</p>
+      <p class="compressed"><span class="tag">The rule</span>
+        Every tool in this workshop moves failure earlier or makes it smaller. Not one makes
+        the software better <em>because</em> it failed.</p>
+    </div>
+    <div class="body">
+      <h2>Robust is not the top of the ladder</h2>
+      <p>
+        Taleb’s three responses to stress: fragile things break, robust things resist
+        unchanged, antifragile things get <em>stronger</em>. Redundancy, failover, retries,
+        bulkheads, circuit breakers, graceful degradation, defence in depth — all of it is
+        resistance. The system that survives the incident is exactly the system that entered
+        it. Nothing about being attacked made it better at being attacked.
+      </p>
+      <figure class="diagram">
+        <div>
+          <svg viewBox="0 0 720 210" role="img" aria-label="Three rungs of a ladder. Fragile and robust are solid rungs, and a bracket labelled every tool in this workshop spans only those two. The antifragile rung is drawn dashed and labelled we do not know how to build this.">
+            <!-- rungs -->
+            <rect x="150" y="150" width="420" height="40" class="s-box"/>
+            <text x="166" y="175" class="s-lbl">FRAGILE</text>
+            <text x="300" y="175" class="s-mut">breaks · one server, no backups</text>
+
+            <rect x="150" y="96" width="420" height="40" class="s-box" stroke="var(--accent)"/>
+            <text x="166" y="121" class="s-acc">ROBUST</text>
+            <text x="300" y="121" class="s-mut">resists, unchanged · replicas, retries, breakers</text>
+
+            <rect x="150" y="42" width="420" height="40" class="s-box" stroke="var(--refute)" stroke-dasharray="7 5"/>
+            <text x="166" y="67" class="s-ref">ANTIFRAGILE</text>
+            <text x="300" y="67" class="s-mut">gets stronger · … we cannot build this yet</text>
+
+            <!-- bracket over rows 1-2 -->
+            <line x1="132" y1="96" x2="112" y2="96" class="s-line" opacity=".7"/>
+            <line x1="112" y1="96" x2="112" y2="190" class="s-line" opacity=".7"/>
+            <line x1="112" y1="190" x2="132" y2="190" class="s-line" opacity=".7"/>
+            <text x="104" y="150" class="s-lbl" text-anchor="end">every tool</text>
+            <text x="104" y="166" class="s-lbl" text-anchor="end">in this</text>
+            <text x="104" y="182" class="s-lbl" text-anchor="end">workshop</text>
+
+            <!-- stress arrow -->
+            <text x="592" y="121" class="s-mut">stress</text>
+            <text x="592" y="137" class="s-mut">applied</text>
+          </svg>
+        </div>
+        <figcaption>
+          Static types, <code>@tailrec</code>, the borrow checker, <code>GOMEMLIMIT</code>,
+          cold-start budgets, pool sizing — relabelled honestly, the entire session is a
+          toolkit for row two.
+        </figcaption>
+      </figure>
+      <p>
+        That is not a criticism. Robustness is hard and valuable, and most production software
+        is not even robust. But it is worth knowing the ladder has a rung above the one we are
+        standing on. Work out what that top rung would actually require and you land on five
+        things: notice the attack without a human labelling it, tell hostile apart from merely
+        unusual, change itself in response, know whether the change helped — and do all of it
+        <strong>without opening a new hole</strong>.
+      </p>
+      <p>
+        That last one is fatal. A system that rewrites its own defences has, by construction,
+        handed an attacker a new surface: the rewriting mechanism itself. Feed it the right
+        disorder and you do not strengthen it — you steer it. Machine learning already has a
+        name for this: <strong>data poisoning</strong>.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================ 12 -->
+  <section class="idea" id="learning" tabindex="-1">
+    <div class="side">
+      <p class="eyebrow"><b>Block 7</b> · docs/08 · the title of the repo</p>
+      <p class="compressed"><span class="tag">The rule</span>
+        Antifragility is not a robustness technique we have not invented yet. It is a learning
+        problem wearing an engineering costume.</p>
+    </div>
+    <div class="body">
+      <h2>Where the technical thread and the philosophical one meet</h2>
+      <p>
+        Survey what exists today and one pattern holds without exception. Chaos engineering
+        improves the org, in a retro. Fuzzing improves the codebase, once a human or an agent
+        fixes the crash. WAFs improve when a vendor retrains offline. Canary plus auto-rollback
+        reverts to the previous state — the literal opposite of learning. In every case the
+        disorder is converted into improvement <strong>by something outside the running
+        system</strong>. The software carries the lesson to someone else; it never learns it.
+      </p>
+      <p>
+        To get stronger from disorder, a system must extract <em>structure</em> from what
+        happened to it — notice that ten thousand attacks share three shapes, and keep the
+        three shapes rather than the ten thousand records. Storing every attack verbatim is a
+        log. Storing the pattern that generates them is a model. <strong>That is
+        compression.</strong>
+      </p>
+      <figure class="diagram">
+        <div>
+          <svg viewBox="0 0 720 132" role="img" aria-label="A chain of implications: antifragile implies improves from disorder, implies extracts structure from experience, implies predicts the next attack better, implies compresses its history into a model, which is what we mean by learns.">
+            <defs>
+              <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+              </marker>
+            </defs>
+            <rect x="6"   y="30" width="118" height="46" class="s-box" stroke="var(--refute)"/>
+            <text x="65" y="50" class="s-ref" text-anchor="middle">antifragile</text>
+            <text x="65" y="66" class="s-mut" text-anchor="middle">gains from disorder</text>
+            <line x1="124" y1="53" x2="152" y2="53" class="s-line" marker-end="url(#ar3)"/>
+
+            <rect x="156" y="30" width="126" height="46" class="s-box"/>
+            <text x="219" y="50" class="s-lbl" text-anchor="middle">extracts</text>
+            <text x="219" y="66" class="s-mut" text-anchor="middle">structure from it</text>
+            <line x1="282" y1="53" x2="310" y2="53" class="s-line" marker-end="url(#ar3)"/>
+
+            <rect x="314" y="30" width="126" height="46" class="s-box"/>
+            <text x="377" y="50" class="s-lbl" text-anchor="middle">predicts</text>
+            <text x="377" y="66" class="s-mut" text-anchor="middle">the next one better</text>
+            <line x1="440" y1="53" x2="468" y2="53" class="s-line" marker-end="url(#ar3)"/>
+
+            <rect x="472" y="30" width="126" height="46" class="s-box" stroke="var(--accent)"/>
+            <text x="535" y="50" class="s-acc" text-anchor="middle">compresses</text>
+            <text x="535" y="66" class="s-mut" text-anchor="middle">history to a model</text>
+            <line x1="598" y1="53" x2="626" y2="53" class="s-line" stroke="var(--accent)" marker-end="url(#ar3)"/>
+
+            <text x="632" y="50" class="s-acc">= learns</text>
+            <text x="6" y="112" class="s-mut">Shannon, 1948: prediction and compression are two sides of one coin — so “gets stronger from disorder” and “learns” are the same requirement.</text>
+          </svg>
+        </div>
+        <figcaption>
+          Which is why the honest answer to “why don’t we build antifragile software?” is not
+          laziness. We are asking for a system that learns, online, adversarially, and safely
+          — and each of those words is an open research problem on its own.
+        </figcaption>
+      </figure>
+      <figure class="sample">
+        <blockquote>
+          <p>The load-bearing idea comes from Shannon: <strong>prediction and compression are
+          mathematically two sides of the same coin.</strong> If you can predict what comes
+          next, you can encode it cheaply — a good model <em>is</em> a good compressor, and the
+          compressed length of your data is a measure of how much you have understood it.</p>
+        </blockquote>
+        <figcaption>docs/08-robust-vs-antifragile.md</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ============================================================ 13 -->
+  <section class="idea" id="hypothesis" tabindex="-1">
+    <div class="side">
+      <p class="eyebrow"><b>Block 7</b> · docs/08</p>
+      <p class="compressed"><span class="tag">The rule</span>
+        State the prediction before you run the experiment. The oracle must be independent of
+        the thing it judges.</p>
+    </div>
+    <div class="body">
+      <h2>Hypothesis first — the practice that survives agents writing the code</h2>
+      <p>
+        “The antifragile component in your architecture is the team” is the sentence that
+        needs finishing now that a machine writes much of the implementation. What survives is
+        the oldest discipline in science, and BDD already has its grammar:
+        <strong>Given</strong> initial conditions, <strong>When</strong> the intervention,
+        <strong>Then</strong> the result you expect. That is exactly how an experiment is
+        written up — and the <em>red</em> step, watching the test fail before you make it pass,
+        is what proves the test is capable of failing at all. A test you have never seen fail
+        might be checking nothing.
+      </p>
+      <p>
+        So the order changes what a test <em>means</em>. Written first, it is a prediction about
+        what you intended, and it can be wrong. Written afterwards, it is a description of the
+        code you just wrote — a mirror rather than a measurement. Science has a name for this
+        mistake and treats it as a serious one: <strong>HARKing</strong>, short for
+        “hypothesising after the results are known”.
+      </p>
+      <figure class="diagram">
+        <div>
+          <svg viewBox="0 0 720 216" role="img" aria-label="Two development loops. On the left, a human writes the specification and tests first, and those independently judge the agent's implementation. On the right, one agent produces both the implementation and the tests, so the judging arrow loops back to its own author and there is no independent measurement.">
+            <defs>
+              <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+              </marker>
+            </defs>
+            <!-- independent -->
+            <text x="8" y="18" class="s-acc">Independent oracle</text>
+            <rect x="8" y="32" width="112" height="40" class="s-box"/>
+            <text x="64" y="50" class="s-lbl" text-anchor="middle">human</text>
+            <text x="64" y="64" class="s-mut" text-anchor="middle">states intent</text>
+            <line x1="64" y1="72" x2="64" y2="104" class="s-line" marker-end="url(#ar4)"/>
+            <text x="72" y="92" class="s-mut">first</text>
+            <rect x="8" y="108" width="112" height="40" class="s-box" stroke="var(--accent)"/>
+            <text x="64" y="126" class="s-acc" text-anchor="middle">the tests</text>
+            <text x="64" y="140" class="s-mut" text-anchor="middle">can fail</text>
+            <rect x="188" y="108" width="112" height="40" class="s-box"/>
+            <text x="244" y="126" class="s-lbl" text-anchor="middle">agent</text>
+            <text x="244" y="140" class="s-mut" text-anchor="middle">implements</text>
+            <line x1="188" y1="128" x2="124" y2="128" class="s-line" stroke="var(--accent)" marker-end="url(#ar4)"/>
+            <text x="130" y="170" class="s-acc">judges</text>
+            <text x="8" y="196" class="s-mut">green means: the code meets a claim</text>
+            <text x="8" y="210" class="s-mut">written before it existed.</text>
+
+            <!-- self grading -->
+            <text x="400" y="18" class="s-ref">Self-grading</text>
+            <rect x="400" y="32" width="112" height="40" class="s-box" stroke="var(--refute)"/>
+            <text x="456" y="50" class="s-ref" text-anchor="middle">agent</text>
+            <text x="456" y="64" class="s-mut" text-anchor="middle">one pass</text>
+            <line x1="440" y1="72" x2="420" y2="104" class="s-line" stroke="var(--refute)" marker-end="url(#ar4)"/>
+            <line x1="480" y1="72" x2="580" y2="104" class="s-line" stroke="var(--refute)" marker-end="url(#ar4)"/>
+            <rect x="368" y="108" width="112" height="40" class="s-box"/>
+            <text x="424" y="126" class="s-lbl" text-anchor="middle">the tests</text>
+            <text x="424" y="140" class="s-mut" text-anchor="middle">written after</text>
+            <rect x="536" y="108" width="112" height="40" class="s-box"/>
+            <text x="592" y="126" class="s-lbl" text-anchor="middle">the code</text>
+            <text x="592" y="140" class="s-mut" text-anchor="middle">written first</text>
+            <line x1="536" y1="128" x2="484" y2="128" class="s-line" stroke-dasharray="5 4" opacity=".8" marker-end="url(#ar4)"/>
+            <text x="486" y="170" class="s-ref">“judges”</text>
+            <text x="400" y="196" class="s-ref">green means: two artifacts agree.</text>
+            <text x="400" y="210" class="s-mut">No independent measurement was taken.</text>
+          </svg>
+        </div>
+        <figcaption>
+          This is <em>step five of the antifragility thought experiment</em>, relocated from
+          runtime into the development loop: a system that changes its own behaviour has an
+          input channel into its own logic. The agent is not lying — there is simply nothing
+          there to lie about.
+        </figcaption>
+      </figure>
+      <p>
+        Two more things change once an agent is writing code. Review capacity becomes the
+        bottleneck, and verifying 500 lines of plausible implementation costs far more than
+        asserting 20 lines of intent — <strong>specifying is cheaper than auditing</strong>,
+        and the gap widens. And a capable optimiser will satisfy the <em>letter</em> of its
+        objective: hard-coding the fixture, special-casing the input, narrowing a signature
+        until the failing case is unreachable. Which is exactly why invariants beat examples.
+        You cannot hard-code your way past <code>reverse(reverse(xs)) == xs</code>.
+      </p>
+      <p>
+        So the usual balance flips. Code used to be the valuable part and tests the
+        overhead. When code becomes cheap to regenerate, the
+        <strong>specification</strong> is the expensive, durable, human artifact — and the
+        test suite is the only thing in the repository that <em>accumulates</em>, since every
+        bug found becomes a permanent regression test. It is the closest thing you own to an
+        antifragile artifact. Agents do not diminish that. They relocate the human’s
+        contribution onto it.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================ 14 -->
+  <section class="idea" id="synthesis" tabindex="-1">
+    <div class="side">
+      <p class="eyebrow"><b>The whole session</b></p>
+      <p class="compressed"><span class="tag">The rule</span>
+        If you cannot state the test, you have not compressed the requirement — which means
+        you do not yet understand it.</p>
+    </div>
+    <div class="body">
+      <h2>Compression, three times, at three scales</h2>
+      <p>
+        The repository is named for a thesis that turns out to appear at every level of the
+        session, which is the only reason the name is more than a flourish.
+      </p>
+      <ul class="moves">
+        <li><code>as the subject</code><span>The <code>wordfreq</code> benchmark counts how often each of three million words appears — which is literally the first step inside every compression program ever written, and where Shannon’s entropy calculation begins.</span></li>
+        <li><code>as the goal</code><span>Software that gets stronger from attacks would have to keep the <em>pattern</em> behind ten thousand attacks rather than the ten thousand records. Getting stronger from disorder and learning turn out to be the same requirement.</span></li>
+        <li><code>as the method</code><span>Every table here squeezes a pile of measurements into one rule you can carry. A type squeezes a convention into something the compiler checks. A test squeezes what you meant into something that can visibly fail.</span></li>
+      </ul>
+      <p>
+        Put the three together and all the advice in this workshop turns out to be one piece of
+        advice. Understanding something means being able to state it briefly instead of listing
+        every case: the rule instead of forty call sites, the property instead of twenty
+        examples, the model instead of the log file. Every recommendation here picks the short
+        form — the type over the comment, the property over the example, the measurement over
+        the folklore.
+      </p>
+      <p>
+        And the way it goes wrong is always the long form. <em>“I’ll know it when I see it”</em>
+        sounds like a high standard, but it is really an admission that no rule exists yet — and
+        nobody else, human or agent, can build to a rule you have not worked out.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================ close -->
+  <section class="close" id="close" tabindex="-1">
+    <h2>The two sentences worth keeping</h2>
+    <p style="max-width:56ch;color:var(--ink-soft)">
+      If everything else fades, keep these. They are the same habit at two different sizes —
+      one for a benchmark, one for the next feature you are about to build.
+    </p>
+    <div class="last">
+      <p>Measure your workload, on your hardware, with your data — then choose. Everything
+      else is folklore.</p>
+      <p>And say what you expect <em>before</em> you measure — otherwise you are not
+      measuring, you are agreeing with yourself.</p>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p style="margin:0">
+      The one-page version to keep on your desk is <b>docs/00-how-to-choose.md</b>. Every number
+      here can be reproduced from the repo: <code>make bench</code> runs the benchmark suite,
+      <code>make verify</code> runs every demo. These figures came from a 4-core Xeon @ 2.1 GHz
+      — your own numbers will differ, but the shapes and the ratios hold.
+    </p>
+  </footer>
+
+</main>
+
+<script>
+  (function () {
+    var bar = document.getElementById('prog');
+    var sections = Array.prototype.slice.call(
+      document.querySelectorAll('.idea, .close')
+    );
+
+    function onScroll() {
+      var h = document.documentElement;
+      var max = h.scrollHeight - h.clientHeight;
+      var pct = max > 0 ? (h.scrollTop || document.body.scrollTop) / max : 0;
+      bar.style.height = (pct * 100).toFixed(2) + '%';
+    }
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+
+    // arrow / space navigation between ideas, for presenting
+    function go(dir) {
+      var y = window.scrollY + 4;
+      var target = null;
+      if (dir > 0) {
+        for (var i = 0; i < sections.length; i++) {
+          if (sections[i].offsetTop > y + 8) { target = sections[i]; break; }
+        }
+      } else {
+        for (var j = sections.length - 1; j >= 0; j--) {
+          if (sections[j].offsetTop < y - 8) { target = sections[j]; break; }
+        }
+      }
+      if (target) target.scrollIntoView({ block: 'start' });
+      else window.scrollTo({ top: dir > 0 ? document.body.scrollHeight : 0 });
+    }
+
+    document.addEventListener('keydown', function (e) {
+      var t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ' || e.key === 'ArrowRight') {
+        e.preventDefault(); go(1);
+      } else if (e.key === 'ArrowUp' || e.key === 'PageUp' || e.key === 'ArrowLeft') {
+        e.preventDefault(); go(-1);
+      }
+    });
+  })();
+</script>
