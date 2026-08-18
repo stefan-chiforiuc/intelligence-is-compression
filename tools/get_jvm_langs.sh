@@ -12,7 +12,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 SCALA_V=2.13.14
-KOTLIN_V=2.0.21
+# 2.0.21's bundled compiler chokes on JDK 24+ (com.intellij.util.lang.JavaVersion.parse
+# throws IllegalArgumentException on version strings like "25.0.4"). 2.4.10 is the
+# oldest stable release confirmed to parse them; bump further if a newer JDK regresses.
+KOTLIN_V=2.4.10
 COROUTINES_V=1.8.1
 TROVE_V=1.0.20200330
 ANNOTATIONS_V=13.0

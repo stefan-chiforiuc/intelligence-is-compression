@@ -16,6 +16,13 @@ pause() { [[ $PAUSE -eq 1 ]] && { printf '\n\033[2m[enter to continue]\033[0m'; 
 
 mkdir -p build/demos
 
+# Resolved ONCE: tsc's own diagnostics are expected output in some demos below
+# (var_inference.ts is SUPPOSED to fail), so we can't tell "npx --no-install
+# tsc found no local install" apart from "tsc ran and reported an error" by
+# exit code alone. Pick the binary up front instead of retrying on failure.
+TSC="npx --no-install tsc"
+$TSC --version >/dev/null 2>&1 || TSC="npx tsc"
+
 hr; say "1/5  JavaScript - dynamic + WEAK. The bug ships silently."
 node demos/typing/weak_typing.js
 pause
@@ -25,12 +32,9 @@ python3 demos/typing/strong_typing.py
 pause
 
 hr; say "3/5  TypeScript - static types, ERASED at run time."
-npx --no-install tsc demos/typing/erasure.ts --outDir build/demos \
+$TSC demos/typing/erasure.ts --outDir build/demos \
   --target es2022 --module nodenext --moduleResolution nodenext \
-  --skipLibCheck --types node 2>/dev/null \
-  || npx tsc demos/typing/erasure.ts --outDir build/demos \
-       --target es2022 --module nodenext --moduleResolution nodenext \
-       --skipLibCheck --types node
+  --skipLibCheck --types node
 node build/demos/erasure.js
 echo
 say "    The same line of code, before and after compilation:"
@@ -50,6 +54,30 @@ javac -d build/demos demos/typing/WontCompile.java 2>&1 \
   | grep -v 'Picked up JAVA_TOOL_OPTIONS' | sed 's/^/    /' || true
 echo
 rustc --edition 2021 demos/typing/wont_compile.rs -o /dev/null 2>&1 | head -20 | sed 's/^/    /' || true
+
+hr; say "BONUS  var / := / let are not dynamic typing"
+echo
+say "    Java's var, Go's :=, Rust's let and TypeScript's inferred let all pick"
+say "    ONE type at the declaration and keep it forever. Only Python lets a"
+say "    name change type mid-life. Watch each one reject a type change:"
+echo
+say "    Java  -"
+javac -d build/demos demos/typing/VarInference.java 2>&1 | grep -v 'Picked up JAVA_TOOL_OPTIONS' | sed 's/^/      /' || true
+echo
+say "    Go    -"
+go build -o /dev/null demos/typing/var_inference.go 2>&1 | sed 's/^/      /' || true
+echo
+say "    Rust  -"
+rustc --edition 2021 demos/typing/var_inference.rs -o /dev/null 2>&1 | head -8 | sed 's/^/      /' || true
+echo
+say "    TypeScript -"
+$TSC demos/typing/var_inference.ts --outDir build/demos \
+  --target es2022 --module nodenext --moduleResolution nodenext \
+  --skipLibCheck --types node 2>&1 | sed 's/^/      /' || true
+echo
+say "    Python - the control. Nothing rejects this, because there is nothing to reject:"
+python3 demos/typing/var_inference.py | sed 's/^/      /'
+pause
 
 hr
 say "Summary to put on the board:"

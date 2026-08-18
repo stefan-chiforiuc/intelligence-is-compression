@@ -35,6 +35,7 @@ help:
 	@echo "    make demo-typing      block 1  — static/dynamic, strong/weak, erasure"
 	@echo "    make demo-jit         block 2  — AOT vs JIT warm-up curves"
 	@echo "    make demo-tailcalls   block 2b — Java vs Scala vs Kotlin, TCO"
+	@echo "    make demo-null-safety block 2b — Java NPE vs Kotlin String?, +Rust/TS/Python"
 	@echo "    make demo-memory      block 3  — stack vs heap, object cost"
 	@echo "    make demo-gc          block 3  — collectors and tail latency"
 	@echo "    make demo-concurrency block 4  — parallel scaling + data races"
@@ -182,6 +183,10 @@ jvm-langs: build/jvm-langs/env.sh
 .PHONY: demo-tailcalls
 demo-tailcalls: build/jvm-langs/env.sh
 	@bash demos/tail-calls/run.sh
+
+.PHONY: demo-null-safety
+demo-null-safety: build/jvm-langs/env.sh
+	@bash demos/null-safety/run.sh
 
 # --- Block 4: concurrency ---------------------------------------------------
 .PHONY: demo-concurrency

@@ -66,6 +66,7 @@ make bench-corpus     # the same benchmark on two corpora — the data is the wo
 make demo-typing      # static/dynamic, strong/weak, and type erasure
 make demo-jit         # AOT vs JIT warm-up curves
 make demo-tailcalls   # Java vs Scala vs Kotlin: tail-call optimisation
+make demo-null-safety # Java NPE vs Kotlin String?, plus Rust/TS/Python
 make demo-memory      # stack vs heap, and what an object really costs
 make demo-gc          # garbage collectors compared by tail latency
 make demo-concurrency # parallel scaling + data races in all five languages
@@ -160,6 +161,7 @@ demos/
   typing/                  strong/weak x static/dynamic, and type erasure
   jit-warmup/              per-batch timing inside one process
   tail-calls/              Java vs Scala vs Kotlin, proved with javap
+  null-safety/             Java NPE vs Kotlin String? vs Rust Option<T>
   stack-heap/              Go escape analysis, stack limits
     objsize/               measured bytes-per-object in all 5 languages
   gc/                      collectors compared by tail latency

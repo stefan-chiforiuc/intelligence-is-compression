@@ -9,7 +9,11 @@ cd "$(dirname "$0")/../.."
 
 hr()  { printf '\n\033[1;34m%s\033[0m\n' "───────────────────────────────────────────────────────────────"; }
 say() { printf '\033[1;36m%s\033[0m\n' "$*"; }
-nojava() { grep -v 'Picked up JAVA_TOOL_OPTIONS' || true; }
+
+# Strips the JAVA_TOOL_OPTIONS banner some environments inject, plus the
+# restricted-native-access / sun.misc.Unsafe deprecation warnings the
+# embeddable Kotlin compiler prints on JDK 24+ - both are noise, not signal.
+nojava() { grep -Ev 'Picked up JAVA_TOOL_OPTIONS|^WARNING:' || true; }
 
 if [[ ! -f build/jvm-langs/env.sh ]]; then
   echo "Scala/Kotlin compilers not present. Fetching them (~110 MB, once) ..."
