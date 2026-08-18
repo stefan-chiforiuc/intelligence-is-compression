@@ -19,6 +19,7 @@ import argparse
 import json
 import os
 import re
+import socket
 import statistics
 import subprocess
 import sys
@@ -31,7 +32,19 @@ from concurrent.futures import ThreadPoolExecutor
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 JAR = os.path.join(HERE, "target", "spring-cold-start-1.0.0.jar")
-PORT = 18080
+
+
+def _free_port() -> int:
+    """An OS-assigned free port. A fixed port (e.g. 18080) can already be
+    bound by something else on the machine - a container, a colleague's
+    service, WSL's port-forwarding relay - and every scenario below would
+    then fail identically with no clue why."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+PORT = _free_port()
 BASE = f"http://127.0.0.1:{PORT}"
 
 STARTED_RE = re.compile(r"Started TrainingApp in ([0-9.]+) seconds")
