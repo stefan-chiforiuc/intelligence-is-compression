@@ -36,6 +36,7 @@ help:
 	@echo "    make demo-jit         block 2  — AOT vs JIT warm-up curves"
 	@echo "    make demo-tailcalls   block 2b — Java vs Scala vs Kotlin, TCO"
 	@echo "    make demo-null-safety block 2b — Java NPE vs Kotlin String?, +Rust/TS/Python"
+	@echo "    make demo-style       block 2c — fold vs reduce, pure fns vs OOP, Spring beans as FP"
 	@echo "    make demo-memory      block 3  — stack vs heap, object cost"
 	@echo "    make demo-gc          block 3  — collectors and tail latency"
 	@echo "    make demo-concurrency block 4  — parallel scaling + data races"
@@ -188,6 +189,10 @@ demo-tailcalls: build/jvm-langs/env.sh
 demo-null-safety: build/jvm-langs/env.sh
 	@bash demos/null-safety/run.sh
 
+.PHONY: demo-style
+demo-style: build/jvm-langs/env.sh
+	@bash demos/programming-style/run.sh
+
 # --- Block 4: concurrency ---------------------------------------------------
 .PHONY: demo-concurrency
 demo-concurrency:
@@ -298,45 +303,48 @@ results.json:
 .PHONY: verify
 verify: setup jvm-langs
 	@echo ""
-	@echo "=== 1/13 benchmark suite (quick) ==============================="
+	@echo "=== 1/14 benchmark suite (quick) ==============================="
 	@$(PY) tools/bench.py --reps 1 --warmup 0 --no-build
 	@echo ""
-	@echo "=== 2/13 typing demo ==========================================="
+	@echo "=== 2/14 typing demo ==========================================="
 	@bash demos/typing/run.sh --fast >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 3/13 jit warm-up demo ======================================"
+	@echo "=== 3/14 jit warm-up demo ======================================"
 	@$(PY) demos/jit-warmup/run.py --langs rust go java >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 4/13 tail-call demo (Java/Scala/Kotlin) ===================="
+	@echo "=== 4/14 tail-call demo (Java/Scala/Kotlin) ===================="
 	@bash demos/tail-calls/run.sh >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 5/13 memory demo ==========================================="
+	@echo "=== 5/14 memory demo ==========================================="
 	@bash demos/stack-heap/objsize/run.sh >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 6/13 gc demo ==============================================="
+	@echo "=== 6/14 gc demo ==============================================="
 	@bash demos/gc/run.sh >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 7/13 parallel scaling demo ================================="
+	@echo "=== 7/14 parallel scaling demo ================================="
 	@$(PY) demos/concurrency/parallel/run.py --size 600 >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 8/13 data race demo ========================================"
+	@echo "=== 8/14 data race demo ========================================"
 	@bash demos/concurrency/races/run.sh >/dev/null && echo "  ok"
 	@echo ""
-	@echo "=== 9/13 parallelism cost + virtual threads ==================="
+	@echo "=== 9/14 parallelism cost + virtual threads ==================="
 	@mkdir -p build/demos/parcost
 	@javac -d build/demos/parcost demos/java-parallel-cost/*.java $(NOJAVANOISE)
 	@java -cp build/demos/parcost ParallelCost >/dev/null 2>&1 && echo "  ok"
 	@echo ""
-	@echo "=== 10/13 api race (20 users, shared array) ==================="
+	@echo "=== 10/14 api race (20 users, shared array) ==================="
 	@bash demos/api-race/run.sh 8 5 50 >/dev/null 2>&1 && echo "  ok"
 	@echo ""
-	@echo "=== 11/13 database pools + transactions ======================="
+	@echo "=== 11/14 database pools + transactions ======================="
 	@bash demos/db-scaling/run.sh >/dev/null 2>&1 && echo "  ok (real DB or simulation, whichever was reachable)"
 	@echo ""
-	@echo "=== 12/13 spring boot cold start =============================="
+	@echo "=== 12/14 spring boot cold start =============================="
 	@$(PY) demos/spring-boot/run.py --part 1 --reps 1 >/dev/null 2>&1 && echo "  ok" || echo "  SKIPPED (maven/network unavailable)"
 	@echo ""
-	@echo "=== 13/13 carbon estimate ====================================="
+	@echo "=== 13/14 programming style (fold, pure fns, Spring beans) ===="
+	@bash demos/programming-style/run.sh >/dev/null && echo "  ok"
+	@echo ""
+	@echo "=== 14/14 carbon estimate ====================================="
 	@$(PY) tools/carbon.py >/dev/null && echo "  ok"
 	@echo ""
 	@echo "All demos ran. You are ready to present."
