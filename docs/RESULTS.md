@@ -6,13 +6,13 @@
 
 ## Machine
 
-- CPU: Intel(R) Xeon(R) Processor @ 2.10GHz (4 cores)
-- OS: Linux-6.18.5-fc-v20-x86_64-with-glibc2.39
-- Rust: rustc 1.94.1 (e408947bf 2026-03-25)
-- Go: go version go1.24.7 linux/amd64
-- Java: OpenJDK 64-Bit Server VM (build 21.0.10+7-Ubuntu-124.04, mixed mode, sharing)
-- Node: v22.22.2
-- Python: 3.11.15
+- CPU: 11th Gen Intel(R) Core(TM) i7-11850H @ 2.50GHz (16 cores)
+- OS: Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39
+- Rust: rustc 1.97.1 (8bab26f4f 2026-07-14)
+- Go: go version go1.26.5 linux/amd64
+- Java: OpenJDK 64-Bit Server VM Temurin-25.0.4+7 (build 25.0.4+7-LTS, mixed mode, sharing)
+- Node: v24.16.0
+- Python: 3.12.3
 - Repetitions per cell: 5 (median reported)
 
 ## mandelbrot
@@ -21,11 +21,11 @@ _CPU-bound float math, no allocation_ — argument `1000`
 
 | Language | Wall (median) | CPU | Peak RSS | vs fastest |
 | --- | ---: | ---: | ---: | ---: |
-| Rust | 56.7 ms | 56.6 ms | 13.6 MB | 1.1x |
-| Go | 49.9 ms | 51.0 ms | 13.6 MB | 1.0x |
-| Java | 114.3 ms | 129.0 ms | 40.2 MB | 2.3x |
-| TypeScript | 85.5 ms | 88.3 ms | 52.0 MB | 1.7x |
-| Python | 2.30 s | 2.30 s | 13.6 MB | 46.1x |
+| Rust | 83.0 ms | 82.8 ms | 14.6 MB | 1.0x |
+| Go | 86.9 ms | 88.0 ms | 14.6 MB | 1.0x |
+| Java | 119.5 ms | 130.2 ms | 40.4 MB | 1.4x |
+| TypeScript | 123.3 ms | 128.2 ms | 52.2 MB | 1.5x |
+| Python | 2.38 s | 2.38 s | 14.6 MB | 28.6x |
 
 Output identical across languages: yes
 
@@ -35,25 +35,25 @@ _allocation + GC pressure, millions of tiny objects_ — argument `16`
 
 | Language | Wall (median) | CPU | Peak RSS | vs fastest |
 | --- | ---: | ---: | ---: | ---: |
-| Rust | 317.8 ms | 317.4 ms | 13.6 MB | 1.3x |
-| Go | 463.7 ms | 1.00 s | 14.4 MB | 1.9x |
-| Java | 281.1 ms | 334.9 ms | 196.7 MB | 1.2x |
-| TypeScript | 239.8 ms | 291.3 ms | 98.0 MB | 1.0x |
-| Python | 4.35 s | 4.35 s | 19.9 MB | 18.2x |
+| Rust | 275.8 ms | 275.7 ms | 14.6 MB | 1.1x |
+| Go | 541.5 ms | 1.10 s | 14.6 MB | 2.2x |
+| Java | 242.3 ms | 311.1 ms | 193.9 MB | 1.0x |
+| TypeScript | 285.0 ms | 359.9 ms | 100.2 MB | 1.2x |
+| Python | 4.92 s | 4.93 s | 22.1 MB | 20.3x |
 
 Output identical across languages: yes
 
 ## wordfreq
 
-_file I/O, strings, hash map, sort - closest to real code_ — argument `/home/user/default-claude-reseaech/data/words.txt`
+_file I/O, strings, hash map, sort - closest to real code_ — argument `data/words.txt`
 
 | Language | Wall (median) | CPU | Peak RSS | vs fastest |
 | --- | ---: | ---: | ---: | ---: |
-| Rust | 225.8 ms | 225.5 ms | 28.4 MB | 1.0x |
-| Go | 299.3 ms | 362.1 ms | 96.6 MB | 1.3x |
-| Java | 771.3 ms | 999.0 ms | 234.1 MB | 3.4x |
-| TypeScript | 1.29 s | 1.50 s | 271.0 MB | 5.7x |
-| Python | 894.5 ms | 893.8 ms | 240.8 MB | 4.0x |
+| Rust | 155.6 ms | 155.3 ms | 28.2 MB | 1.0x |
+| Go | 246.7 ms | 322.9 ms | 97.0 MB | 1.6x |
+| Java | 634.1 ms | 915.6 ms | 223.2 MB | 4.1x |
+| TypeScript | 995.1 ms | 1.15 s | 317.2 MB | 6.4x |
+| Python | 582.7 ms | 582.3 ms | 214.0 MB | 3.7x |
 
 Output identical across languages: yes
 
@@ -63,11 +63,11 @@ _cold start: process spawn + runtime boot, no real work_ — argument `21`
 
 | Language | Wall (median) | CPU | Peak RSS | vs fastest |
 | --- | ---: | ---: | ---: | ---: |
-| Rust | 1.5 ms | 1.4 ms | 13.6 MB | 1.0x |
-| Go | 1.5 ms | 1.9 ms | 13.6 MB | 1.0x |
-| Java | 46.2 ms | 60.4 ms | 40.2 MB | 31.3x |
-| TypeScript | 29.2 ms | 29.5 ms | 44.0 MB | 19.8x |
-| Python | 10.5 ms | 10.3 ms | 13.6 MB | 7.1x |
+| Rust | 1.3 ms | 1.1 ms | 14.6 MB | 1.0x |
+| Go | 2.8 ms | 3.2 ms | 14.6 MB | 2.1x |
+| Java | 42.9 ms | 54.6 ms | 40.2 MB | 32.7x |
+| TypeScript | 31.9 ms | 32.2 ms | 44.1 MB | 24.3x |
+| Python | 16.9 ms | 16.8 ms | 14.6 MB | 12.9x |
 
 Output identical across languages: yes
 
