@@ -1,8 +1,9 @@
 # Closing note — Robust is not the top of the ladder
 
-*A ten-minute philosophy segment for the end of the session. No demo, no
-benchmark. The point is to leave juniors with a question that outlives the
-numbers.*
+*A ten-to-fifteen-minute philosophy segment for the end of the session. No demo,
+no benchmark. The point is to leave juniors with a question that outlives the
+numbers — and, in the last third, with the one practice that still load-bears
+when a machine is writing the code.*
 
 ---
 
@@ -177,6 +178,146 @@ juniors explicitly, because it tells them where their own value sits.
 
 ---
 
+## Hypothesis first — the one practice that survives agents writing the code
+
+*"The antifragile component is the team"* is the sentence agents complicate,
+so it is worth finishing the thought rather than leaving it in 2019. If a
+machine now writes much of the implementation, where exactly is the human's
+contribution — and which of our practices still load-bears?
+
+The answer is the oldest one in engineering, and it is the same one science
+settled on four hundred years ago: **state the prediction before you run the
+experiment.**
+
+### BDD's grammar is an experiment protocol
+
+This is not an analogy stretched for effect. Line them up:
+
+| BDD | Controlled experiment |
+| --- | --- |
+| **Given** some initial state | controlled initial conditions |
+| **When** this happens | the intervention |
+| **Then** observe this outcome | the predicted observation |
+| the test **fails first** (red) | the hypothesis is *falsifiable* — you have shown it can fail |
+| the test then passes (green) | the prediction survived contact with reality |
+
+The red step is the part juniors skip and the part that carries the
+epistemics. A test you have never watched fail is a test of unknown power —
+you have not established that it *can* fail, which is exactly what a control
+condition establishes in an experiment. `assertTrue(true)` passes forever and
+measures nothing, and most useless test suites are a subtler version of it.
+
+### Order is not a style preference — it decides what the test *means*
+
+| | Test written **first** | Test written **after** |
+| --- | --- | --- |
+| Epistemic status | a falsifiable prediction about intent | an observation of the implementation |
+| What it can catch | code that fails to do what you wanted | code that has *changed* since you looked |
+| If the code is wrong | the test fails — you find out | the test encodes the bug and goes green |
+| Scientific analogue | a pre-registered hypothesis | **HARKing** — hypothesising after the results are known |
+
+A test written after the fact is measured against the very thing it is
+supposed to be checking. It is a mirror, not an instrument. Written by a
+human, that is a mild self-deception. Written in the same pass as the code it
+grades, it is **confirmation bias, automated** — and that is the situation
+agents put us in by default.
+
+### Why this goes from good hygiene to load-bearing
+
+Three things change when an agent writes the implementation:
+
+1. **Review capacity becomes the bottleneck.** Agents emit code far faster
+   than anyone reads it. Verifying 500 lines of plausible-looking
+   implementation is dramatically more expensive than asserting 20 lines of
+   intent — and only one of those two costs stays flat as the codebase grows.
+   Specifying is cheaper than auditing, and the gap widens.
+2. **Self-grading is unfalsifiable by construction.** This is precisely
+   **step 5** from the thought experiment above, relocated from runtime to
+   the development loop: *a system that changes its own behaviour has an
+   input channel into its own logic.* If one process writes both the code and
+   the oracle that judges it, "the tests pass" carries no information about
+   correctness — there was no independent measurement. The agent is not
+   lying; there is simply nothing there to lie about.
+3. **Agents optimise against the objective you actually state.** Give a
+   capable optimiser a test suite as its target and it will satisfy the
+   *letter* of it — special-casing the fixture, hard-coding the expected
+   value, narrowing a signature until the failing case is unreachable. This
+   is the same phenomenon as the poisoning vector above: the grading
+   mechanism becomes an attack surface, and you do not need a malicious agent
+   for it, only an effective one.
+
+Point 3 is also the strongest argument for the practice the survey table
+already singled out. **Property-based tests state invariants rather than
+examples**, so the implementer — human or agent — never gets to see the
+inputs it will be judged on. You cannot hard-code your way past
+`reverse(reverse(xs)) == xs`. Of everything on that table, this is the form
+of hypothesis-first that an optimiser cannot game, which is why the
+"one thing a junior can start on Monday" note now applies with more force
+than when it was written.
+
+### The inversion worth saying out loud
+
+Code used to be the asset and tests the overhead. When implementation becomes
+cheap and regenerable, that flips:
+
+> The **specification** is the expensive, durable, human artifact.
+> The implementation is increasingly disposable output.
+
+An agent can rewrite an implementation ten times in an afternoon. The test
+suite is what makes the tenth rewrite safe, and it is the only thing in the
+repository that **accumulates** — every bug found becomes a permanent
+regression test, so the suite genuinely gets stronger from failure while the
+code around it is replaced. Of everything in your stack, the test suite is
+the closest thing you own to an antifragile artifact. Agents do not diminish
+that; they relocate the human's contribution *onto* it, from writing
+implementations to writing the falsifiable statements implementations are
+judged against.
+
+### And this is where the session's own thesis cashes out
+
+A test suite is a **compression of intent** — the shortest artifact from
+which the intended behaviour can be recovered. Run that through the chain
+established two sections above:
+
+```
+you cannot state the test  ⇒  you cannot compress the requirement
+                          ⇒  you have no model of what "correct" means
+                          ⇒  ...you have not understood the requirement yet
+```
+
+"I'll know it when I see it" is not a demanding standard, it is the admission
+that no model exists — and neither a junior nor an agent can build to a model
+you do not have. **Writing the test first is how you find out whether you
+understood the problem, before spending anything on solving it.** In the age
+of agents that is not a testing practice; it is the entire job.
+
+### The honest limits — state these too
+
+1. **Tests are samples, not proofs.** Dijkstra, 1970: testing "can be used to
+   show the presence of bugs, but never to show their absence." A green suite
+   is evidence, never a guarantee.
+2. **Hypothesis-first protects against confirmation bias, not against asking
+   the wrong question.** You can pre-register, and rigorously verify, a
+   requirement nobody wanted. Nothing here substitutes for talking to the
+   people who will use the thing.
+3. **The empirical literature on TDD is genuinely mixed.** Do not oversell
+   defect-rate claims; some of the research suggests the benefit comes from
+   working in small verified increments rather than from the test-first
+   ordering as such. The argument in this section is *epistemic* — about who
+   is permitted to grade whom — not a productivity statistic.
+4. **Not everything is test-first shaped.** Spikes, exploratory work, and
+   "does this feel right" UI judgement are poorly served by it. Test-first
+   applies where "correct" can be stated; that is most business logic and
+   very little visual design.
+5. **The claim is not "agents cannot write tests."** They can, often well.
+   The claim is narrower and harder to escape: **the oracle must be
+   independent of the thing it judges.** An agent drafting acceptance
+   criteria you then read, challenge, and approve *before* it implements is
+   fine. The same agent writing code and its tests in one unreviewed pass is
+   not — regardless of how good either artifact looks.
+
+---
+
 ## Discussion prompts
 
 1. Name something in your current system that is genuinely antifragile. *(Most
@@ -189,6 +330,17 @@ juniors explicitly, because it tells them where their own value sits.
    that antifragile, or just a good feedback loop with a human in it?
 4. Compression = prediction = understanding. If that is right, what does it say
    about a monitoring system that stores everything and models nothing?
+5. An agent writes a function and its tests in one pass. Everything is green.
+   What have you actually learned about the code? *(That the two artifacts
+   agree. Nothing about whether either matches what you wanted — there was no
+   independent oracle.)*
+6. Your agent makes a failing test pass by special-casing the exact input in
+   the test. Is that the agent's bug or the test's? *(The test's. It stated an
+   example, not a property. `reverse(reverse(xs)) == xs` cannot be satisfied
+   this way — which is why invariants beat examples when the implementer is an
+   optimiser.)*
+7. If the implementation is now cheap to regenerate and the specification is
+   not, what does that say about where a junior should be building skill?
 5. Should software be antifragile — or is *predictable* worth more than
    *self-improving* for the systems you are paid to run? *(There is a strong
    argument that a bank ledger should be maximally boring and never surprise
@@ -212,3 +364,15 @@ juniors explicitly, because it tells them where their own value sits.
 - John Allspaw / Richard Cook on resilience engineering — the strongest
   available account of how *human* systems absorb failure, and the best argument
   that your team is the adaptive component.
+- Karl Popper, *Conjectures and Refutations* (1963) — falsifiability: a claim
+  that cannot fail is not a claim about the world. The whole basis of the
+  hypothesis-first section above.
+- Kent Beck, *Test-Driven Development: By Example* (2002), and Dan North's
+  original write-up of **BDD** (2006) — where `Given/When/Then` comes from, and
+  why it was phrased in domain language rather than in code.
+- Norbert L. Kerr, *HARKing: Hypothesizing After the Results are Known* (1998) —
+  the psychology literature's name for writing your hypothesis after seeing the
+  results, and why pre-registration exists as the fix.
+- Edsger Dijkstra, *Notes on Structured Programming* (1970) — "program testing
+  can be used to show the presence of bugs, but never to show their absence."
+  Keep it next to any claim that a green suite proves anything.

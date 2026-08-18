@@ -192,7 +192,34 @@ Say this every time; the demo is persuasive enough to be over-read.
 **"Why not use LLMs to write the fast version?"**
 Fine, and increasingly common — but it does not change the decision. You still
 have to know *which* resource is scarce to know what to ask for, and you still
-have to verify the result. That is what this session is for.
+have to verify the result. That is what this session is for, and the closing
+block ([`08`](08-robust-vs-antifragile.md)) is about the *verify* half.
+
+**"The agent writes better tests than I do — why shouldn't it write them?"**
+(you will get this in the closing block)
+It probably does write them well, and that is not the claim. The claim is that
+**the oracle must be independent of the thing it judges.** An agent drafting
+acceptance criteria that you read, challenge and approve *before* it implements
+is fine — good, even. The same agent writing code and its tests in one
+unreviewed pass gives you two artifacts that agree with each other and no
+information about whether either matches what you wanted. Green means "these
+two files are consistent", not "this is correct".
+
+**"TDD slows me down, and the agent is fast. Isn't insisting on tests-first a net loss?"**
+Compare the right two things. The alternative to writing 20 lines of intent is
+not "nothing" — it is *reading 500 lines of plausible implementation closely
+enough to be sure*. Specifying is cheaper than auditing, and the gap widens as
+the codebase grows. Also note what the agent's speed did: it moved the
+bottleneck from *typing* to *reviewing*, so the practice that saves review time
+is the one that got more valuable, not less.
+
+**"Isn't this just TDD evangelism with a new coat of paint?"**
+Push back honestly: the empirical literature on TDD and defect rates is
+genuinely mixed, and some of it suggests the gains come from working in small
+verified increments rather than the test-first *ordering* as such. The argument
+in the closing block is deliberately not a productivity statistic — it is
+epistemic. It is about who is permitted to grade whom, which is a question
+agents made urgent rather than one TDD advocates invented.
 
 ---
 
@@ -215,6 +242,14 @@ the core three, because juniors have the least prior exposure to it.
 - have them write an antifragile mechanism for a toy service (auto-ban on
   anomaly), then attack each other's implementations — the fastest way to learn
   why step 5 in Block 7 is the hard one
+- **the hypothesis-first lab, in two halves.** Half the room writes acceptance
+  tests for a small feature *first*, then has an agent implement against them;
+  the other half has an agent implement *and* write the tests in one pass. Then
+  swap and try to break each other's code with an input neither suite covers.
+  The second group's suite is usually greener and weaker — the point lands
+  harder from experiencing it than from being told. Follow with: rewrite one
+  example-based test as a property (`reverse(reverse(xs)) == xs` shape) and see
+  what it catches that the examples did not.
 
 **Remote:** run demos yourself and share the terminal. Do not ask 20 people to
 install five toolchains; you will lose 40 minutes.

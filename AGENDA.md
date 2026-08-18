@@ -53,7 +53,7 @@ do to my code", session 2 is "what happens when many things run at once".
 | 1:55–2:25 | 4. Concurrency and parallelism | `make demo-concurrency` |
 | 2:25–2:45 | 5. Cold starts, cloud and carbon *(merged)* | `make bench-startup` `make carbon` |
 | 2:45–2:52 | 6. The decision framework | `docs/00-how-to-choose.md` |
-| 2:52–3:00 | 7. Closing note: robust vs antifragile | `docs/08-robust-vs-antifragile.md` |
+| 2:52–3:00 | 7. Closing note: antifragile + hypothesis-first *(short close)* | `docs/08-robust-vs-antifragile.md` |
 
 ### Variant B — Concurrency-heavy (4:00)  ← recommended
 
@@ -69,10 +69,10 @@ do to my code", session 2 is "what happens when many things run at once".
 | 2:45–3:05 | **4b. When NOT to parallelise + virtual threads** | `make demo-parallel-cost` |
 | 3:05–3:15 | **Break** | |
 | 3:15–3:35 | **4c. 20 users, one shared array** | `make demo-api-race` |
-| 3:35–3:47 | 5. Cold starts + cloud | `make bench-startup` |
-| 3:47–3:52 | 6. Carbon *(compressed)* | `make carbon` |
-| 3:52–3:56 | 7. The decision framework | `docs/00-how-to-choose.md` |
-| 3:56–4:00 | 8. Closing note: robust vs antifragile | `docs/08-robust-vs-antifragile.md` |
+| 3:35–3:45 | 5. Cold starts + cloud | `make bench-startup` |
+| 3:45–3:49 | 6. Carbon *(compressed)* | `make carbon` |
+| 3:49–3:52 | 7. The decision framework | `docs/00-how-to-choose.md` |
+| 3:52–4:00 | 8. Closing note: antifragile + hypothesis-first | `docs/08-robust-vs-antifragile.md` |
 
 ### Variant C — Full (5:00, or split across two sessions)
 
@@ -743,10 +743,16 @@ Display / hand out [`docs/00-how-to-choose.md`](docs/00-how-to-choose.md).
 
 ---
 
-## Block 7 — Closing note: robust vs antifragile (8–10 min)
+## Block 7 — Closing note: robust vs antifragile, and hypothesis-first (12–15 min)
 
-**No demo. No benchmark.** Leave them with a question that outlives the numbers.
+**No demo. No benchmark.** Leave them with a question that outlives the numbers,
+then with the one practice that still load-bears when a machine writes the code.
 Full text: [`docs/08-robust-vs-antifragile.md`](docs/08-robust-vs-antifragile.md)
+
+*Tight on time? The Taleb framing plus the relabelling of the session is the
+minimum viable close (8 min). The hypothesis-first segment is the part worth
+protecting if you can only keep one — it is the only thing in the session
+juniors can act on tomorrow morning.*
 
 **(3 min) Taleb's three responses to stress:**
 
@@ -803,10 +809,53 @@ toolkit for row two.
 That is not a defeat, and juniors should hear it explicitly — it tells them
 where their own value sits.
 
-**Last slide, one sentence:**
+**(4–5 min) Then finish that thought for the agent era.** "The antifragile
+component is the team" is the sentence that needs updating if a machine now
+writes the implementation. The practice that survives is the oldest one in
+science: **state the prediction before you run the experiment.**
+
+BDD's grammar *is* an experiment protocol — Given (initial conditions) / When
+(the intervention) / Then (the predicted observation) — and the **red** step is
+what makes the hypothesis falsifiable: a test you have never watched fail is a
+test of unknown power.
+
+Three points to land, in order:
+
+1. **Order decides what a test means.** Written first, it is a falsifiable
+   prediction about intent. Written after, it is an observation of the
+   implementation — a mirror, not an instrument. Science's name for that is
+   **HARKing**.
+2. **Self-grading is unfalsifiable by construction** — this is *step 5 of the
+   thought experiment*, moved from runtime into the dev loop. If one process
+   writes both the code and its oracle, "the tests pass" carries no information.
+3. **Agents optimise against the objective you state**, so examples get gamed
+   (hard-coded fixtures, special-cased inputs) and **invariants do not** —
+   `reverse(reverse(xs)) == xs` has no shortcut. This is why property-based
+   testing was the one row on the survey table that came closest to antifragile.
+
+**The inversion to say out loud:** code used to be the asset and tests the
+overhead; when implementation is cheap and regenerable, the **specification** is
+the expensive, durable, human artifact — and the test suite is the only thing in
+the repo that *accumulates*. Then the session's own thesis closes the loop: a
+test suite is a **compression of intent**, so if you cannot state the test you
+have not compressed the requirement, which means you do not yet understand it.
+*"I'll know it when I see it"* is the admission that no model exists — and
+neither a junior nor an agent can build to a model you do not have.
+
+Be honest about the limits (full list in the doc): tests are samples not proofs
+(Dijkstra), hypothesis-first does not protect you from asking the wrong
+question, the TDD defect-rate literature is genuinely mixed, and the claim is
+**not** "agents cannot write tests" — it is that the oracle must be *independent*
+of the thing it judges.
+
+**Last slide, two sentences** — and note they are the same discipline, once at
+the scale of a benchmark and once at the scale of a feature:
 
 > Measure your workload, on your hardware, with your data — then choose.
 > Everything else is folklore.
+>
+> And say what you expect *before* you measure — otherwise you are not
+> measuring, you are agreeing with yourself.
 
 ---
 
