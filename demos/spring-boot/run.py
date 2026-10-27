@@ -7,7 +7,7 @@ thread pool does under load.
     python3 demos/spring-boot/run.py --part 2      # thread pool only
 
 Part 1 answers the question the `startup` benchmark cannot: `Hello.java` boots
-in ~46 ms, but nobody ships Hello.java. What does a framework actually cost?
+in tens of milliseconds, but nobody ships Hello.java. What does a framework actually cost?
 
 Part 2 answers "what is a request thread pool for". Tomcat's default is 200
 threads - a number most teams have never looked at, let alone chosen - and it
@@ -31,6 +31,19 @@ from concurrent.futures import ThreadPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
+
+def startup_floor() -> dict:
+    """Bare-runtime cold starts (ms) from the last `make bench`, if present."""
+    ref = {"native": 1.5, "csharp": 45.0, "java": 46.0, "measured": False}
+    try:
+        with open(os.path.join(ROOT, "results.json")) as fh:
+            langs = json.load(fh)["workloads"]["startup"]["langs"]
+        ms = lambda k: langs[k]["wall_median"] * 1000
+        return {"native": min(ms(k) for k in ("rust", "cpp", "go")),
+                "csharp": ms("csharp"), "java": ms("java"), "measured": True}
+    except (OSError, KeyError, ValueError):
+        return ref
+
 JAR = os.path.join(HERE, "target", "spring-cold-start-1.0.0.jar")
 
 
@@ -154,12 +167,15 @@ def part1(reps: int) -> None:
         print(f"{label:<32} {med * 1000:>15.0f} ms {rep:>16}")
 
     print()
-    print("FOR COMPARISON (from the main benchmark suite, same machine)")
-    print(f"  {'Go / Rust hello':<32} {'~1.5 ms':>15}")
-    print(f"  {'bare JVM Hello.java':<32} {'~46 ms':>15}")
+    floor = startup_floor()
+    print("FOR COMPARISON (from the main benchmark suite" +
+          (", same machine)" if floor["measured"] else "; reference-machine figures, run `make bench` for yours)"))
+    print(f"  {'Go / Rust / C++ hello':<32} {floor['native']:>12.1f} ms")
+    print(f"  {'bare .NET Hello.cs':<32} {floor['csharp']:>12.0f} ms")
+    print(f"  {'bare JVM Hello.java':<32} {floor['java']:>12.0f} ms")
     if baseline:
         print(f"  {'Spring Boot (this app)':<32} {baseline * 1000:>12.0f} ms"
-              f"   = {baseline * 1000 / 46:.0f}x the bare JVM")
+              f"   = {baseline * 1000 / floor['java']:.0f}x the bare JVM")
     print()
     print("""WHAT TO SAY
   The `startup` benchmark measures the FLOOR: a JVM that loads one class.

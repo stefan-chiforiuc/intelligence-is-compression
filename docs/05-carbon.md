@@ -57,19 +57,26 @@ ratio.
 
 | Language | CPU/run | Wh/month | CO2e/month | vs best |
 | --- | ---: | ---: | ---: | ---: |
-| Rust | 226 ms | 11 235 | **3.93 kg** | 1.0x |
-| Go | 362 ms | 18 040 | 6.31 kg | 1.6x |
-| Python | 894 ms | 44 536 | 15.59 kg | 4.0x |
-| Java | 999 ms | 49 776 | 17.42 kg | 4.4x |
-| TypeScript | 1504 ms | 74 949 | 26.23 kg | 6.7x |
+| Rust | 388 ms | 19 308 | **6.76 kg** | 1.0x |
+| C++ | 712 ms | 35 465 | 12.41 kg | 1.8x |
+| Go | 759 ms | 37 802 | 13.23 kg | 2.0x |
+| C# | 961 ms | 47 898 | 16.76 kg | 2.5x |
+| Python | 1163 ms | 57 938 | 20.28 kg | 3.0x |
+| Java | 1660 ms | 82 699 | 28.94 kg | 4.3x |
+| TypeScript | 1981 ms | 98 721 | 34.55 kg | 5.1x |
 
-Switching TypeScript → Rust saves ~22 kg CO2e/month = **0.27 tonnes/year**.
+Switching TypeScript → Rust saves ~28 kg CO2e/month = **0.33 tonnes/year**.
+
+Notice what the model is doing: it multiplies *CPU-seconds*, so Java's 1660 ms
+(it spawns JIT and GC threads, so CPU time exceeds wall time) costs more than
+its 1354 ms wall time suggests, and Go's 759 ms CPU is well above its 577 ms
+wall time for the same reason. Wall time and CPU time are different questions.
 
 ---
 
 ## Now puncture it — in this order
 
-### 1. Put 0.27 tonnes/year in context
+### 1. Put 0.33 tonnes/year in context
 
 One economy passenger, London–New York return, is roughly **0.6–1.0 tonnes**.
 So this entire rewrite — at *fifty million executions per month* — saves less
@@ -89,14 +96,14 @@ python3 tools/carbon.py --requests 50e6 --region eu-north-1
 
 | Region | gCO2e/kWh | TypeScript CO2e/month |
 | --- | ---: | ---: |
-| ap-south-1 (India) | 630 | 47.2 kg |
-| eu-central-1 (Germany) | 350 | 26.2 kg |
-| us-east-1 (Virginia) | 350 | 26.2 kg |
-| us-west-2 (Oregon) | 95 | 7.1 kg |
-| eu-north-1 (Sweden) | 20 | **1.50 kg** |
+| ap-south-1 (India) | 630 | 62.2 kg |
+| eu-central-1 (Germany) | 350 | 34.6 kg |
+| us-east-1 (Virginia) | 350 | 34.6 kg |
+| us-west-2 (Oregon) | 95 | 9.4 kg |
+| eu-north-1 (Sweden) | 20 | **1.97 kg** |
 
 Moving the *same TypeScript code* from Germany to Sweden cuts emissions ~17x.
-Rewriting it in Rust cuts them 6.7x. **The deployment decision beats the
+Rewriting it in Rust cuts them 5.1x. **The deployment decision beats the
 language decision, and it is a config change.**
 
 Ordered list of what actually moves the needle:
@@ -145,7 +152,7 @@ Use it, but state its limits honestly — juniors should see a lecturer criticis
 their own source:
 
 - It benchmarks **CLBG microbenchmarks**, not real applications. Our `wordfreq`
-  result — where Python beats Java and TypeScript — is exactly the kind of case
+  result — where Python lands next to Java and beats TypeScript — is exactly the kind of case
   those microbenchmarks miss.
 - It is from **2017**. Every runtime here has changed substantially since.
 - It measures **CPU energy**, largely ignoring memory, storage, network and

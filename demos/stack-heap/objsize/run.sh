@@ -10,7 +10,10 @@ D=demos/stack-heap/objsize
 
 echo "Building ..."
 rustc -O $D/objsize.rs -o build/demos/objsize_rs 2>/dev/null
+g++ -O2 -std=c++20 $D/objsize.cpp -o build/demos/objsize_cpp
 go build -o build/demos/objsize_go $D/objsize.go
+dotnet build $D/ObjSize.csproj -c Release -o build/demos/objsize_cs --nologo -v q \
+  -p:BaseIntermediateOutputPath="$PWD/build/obj/objsize/" >/dev/null
 javac -d build/demos $D/ObjSize.java 2>&1 | grep -v 'Picked up' || true
 npx --no-install tsc $D/objsize.ts --outDir build/demos --target es2022 \
   --module nodenext --moduleResolution nodenext --skipLibCheck --types node 2>/dev/null \
@@ -23,7 +26,9 @@ echo "COST OF ONE OBJECT WITH TWO REFERENCE FIELDS  (1,000,000 live instances)"
 echo "==============================================================================="
 echo
 build/demos/objsize_rs
+build/demos/objsize_cpp
 build/demos/objsize_go
+dotnet build/demos/objsize_cs/ObjSize.dll
 java -Xms512m -Xmx512m -cp build/demos ObjSize 2>&1 | grep -v 'Picked up'
 node build/demos/objsize.js
 python3 $D/objsize.py
@@ -41,8 +46,17 @@ HOW TO READ THIS
                  No header at all - Rust knows the type statically, and the
                  lifetime is known at compile time, so nothing extra is stored.
 
+  C++     ~32 B  Same story as Rust: 16 B of data, no header, rounded up to
+                 glibc malloc's 16-byte-granular chunk (8 B of bookkeeping
+                 hidden in the chunk). A custom pool/arena allocator is how
+                 C++ gets this down to a flat 16 - you opt in, it is not free.
+
   Go      ~16 B  Two pointers, size class 16. Also no per-object header;
                  Go stores type info in the span metadata, not in the object.
+
+  C#      ~32 B  8-byte header (sync block index) + 8-byte method-table
+                 pointer + 2 x 8-byte references. Unlike the JVM there are no
+                 compressed oops, so the same object is bigger than in Java.
 
   Java    ~24 B  12-byte header (mark word for locking/hashing + compressed
                  class pointer) + 2 x 4-byte compressed oops, padded to 8.

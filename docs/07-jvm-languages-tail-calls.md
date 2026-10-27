@@ -21,7 +21,7 @@ The same function — sum 1..n, written with the recursive call in tail position
 
 | Language | `sumTail(10_000_000)` | Bytecode emitted |
 | --- | --- | --- |
-| Java | **`StackOverflowError`** (~14,119 frames deep) | `invokestatic sumTail` |
+| Java | **`StackOverflowError`** (~14,400 frames deep) | `invokestatic sumTail` |
 | Scala (`@tailrec`) | `50000005000000` | **`goto 0`** |
 | Kotlin (`tailrec`) | `50000005000000` | **`goto 0`** |
 

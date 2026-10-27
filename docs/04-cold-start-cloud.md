@@ -12,21 +12,29 @@ linking, runtime/VM initialisation, class loading, module resolution.
 
 | Language | Cold start | Baseline RSS | Typical image size |
 | --- | ---: | ---: | ---: |
-| Rust | **1.5 ms** | 14 MB | 5–10 MB (scratch/distroless) |
-| Go | **1.5 ms** | 14 MB | 10–20 MB (scratch/distroless) |
-| Python | 11 ms | 14 MB | 50–120 MB (slim) |
-| Node | 29 ms | 44 MB | 60–150 MB (slim/alpine) |
-| Java | 46 ms | 40 MB | 180–400 MB (JRE base) |
+| C++ | **1.5 ms** | 14.6 MB | 5–30 MB (static on scratch, or distroless/cc) |
+| Rust | 1.9 ms | 14.6 MB | 5–10 MB (scratch/distroless) |
+| Go | 2.0 ms | 14.6 MB | 10–20 MB (scratch/distroless) |
+| Python | 18.5 ms | 14.6 MB | 50–120 MB (slim) |
+| Node | 34 ms | 42.8 MB | 60–150 MB (slim/alpine) |
+| C# | 44 ms | 23.3 MB | 80–220 MB (.NET runtime image); 10–30 MB with Native AOT |
+| Java | 69 ms | 40.1 MB | 180–400 MB (JRE base) |
+
+(Cold start and RSS are measured: median of 11, `make bench-startup`. Image
+sizes are typical figures, not measured here.)
 
 Two results worth pausing on:
 
-- **Python starts 2.6x faster than Node.** People expect the opposite. CPython's
+- **Python starts 1.8x faster than Node.** People expect the opposite. CPython's
   interpreter boot is cheap; V8 has a much larger heap and bootstrap to set up.
-- **Rust and Go are indistinguishable** and effectively at the floor imposed by
-  `execve` itself. There is no runtime to initialise.
+- **C++, Rust and Go are indistinguishable** (1.5–2.0 ms) and effectively at the
+  floor imposed by `execve` itself. There is no runtime to initialise.
+- **C# sits between Node and Java** (44 ms). `dotnet app.dll` first has to find
+  and load the runtime (`hostfxr`, `hostpolicy`, the CLR), then JIT `Main`
+  before it can print anything. ReadyToRun and Native AOT exist to shrink this.
 
 > These are floors, and the floor is not what you ship. **We measured a real
-> Spring Boot app: 3819 ms** — 83× the bare JVM and ~2500× Go — and that app has
+> Spring Boot app: 4626 ms** — 67× the bare JVM and ~3000× Go — and that app has
 > four endpoints and no security, JPA or messaging. See
 > [Block 4d](12-spring-boot-cold-start-and-pools.md) and run `make demo-spring`.
 > Measure *your* app, not `Hello`.
@@ -40,7 +48,7 @@ Cold start is not one cost — it is a cost multiplied by how often you pay it.
 ### Serverless
 
 You pay cold start on **every scale-out event**, and on every invocation if you
-are scaled to zero. A 46 ms JVM boot on a 100 ms function is a **46% tax on
+are scaled to zero. A 69 ms JVM boot on a 100 ms function is a **69% tax on
 every request that hits a cold instance**.
 
 This is why AWS Lambda's Java story is dominated by workarounds — provisioned
@@ -83,15 +91,26 @@ argument for a compact runtime.
 
 | Technique | Effect | Cost |
 | --- | --- | --- |
-| CDS (default, already on) | ~31% of startup — verify with `-Xshare:off` | none |
+| CDS (default, already on) | ~37% of startup — verify with `-Xshare:off` | none |
 | AppCDS | scales with your class count; ~0 on a trivial app, 20–40% on a big one | needs a JAR, small build step |
-| GraalVM native-image | 46 ms → ~5 ms | slow builds, reflection config, lower peak throughput |
+| GraalVM native-image | 69 ms → ~5 ms | slow builds, reflection config, lower peak throughput |
 | CRaC / Lambda SnapStart | restore from a warmed snapshot | infra complexity, snapshot correctness |
 | **Keep the JVM warm** | eliminates the problem | you pay for idle capacity |
 
 The last one is the honest answer for most teams. A long-lived pod behind a
 queue makes the whole problem disappear, and it is why the JVM remains
 excellent for long-running services.
+
+### .NET
+
+| Technique | Effect | Cost |
+| --- | --- | --- |
+| ReadyToRun | precompiles IL to native code, so there is much less JIT at start-up | bigger assemblies; still boots the runtime |
+| Native AOT | a self-contained native binary: no JIT, no runtime to boot | no runtime codegen, restricted reflection, trimming warnings |
+| Trimming | smaller image | reflection-heavy libraries break |
+
+(These are the standard options; this repo measures the default `dotnet app.dll`
+only, so we have no numbers for them.)
 
 ### Node
 
@@ -205,7 +224,7 @@ Four rules:
 2. You must run 200 replicas of a small service on a fixed node budget. Which
    column of the table decides the language? *(Baseline RSS, not CPU.)*
 3. When is a 400 MB Java image completely fine? *(Long-lived service, deployed
-   a few times a week, where 46 ms of start-up is invisible and the JVM's
+   a few times a week, where 69 ms of start-up is invisible and the JVM's
    throughput and ecosystem win.)*
 4. Your team wants to move a Python service to Alpine to cut image size. What
    do you ask for first? *(A benchmark on musl. Image size is not free.)*

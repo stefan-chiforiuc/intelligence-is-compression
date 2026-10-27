@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- One project per workload so each has its own Main. Default globbing is
+       off so the sibling Java/Go/Rust/TS sources are never picked up. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AssemblyName>WordFreq</AssemblyName>
+    <RootNamespace>WordFreq</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="WordFreq.cs" />
+  </ItemGroup>
+</Project>

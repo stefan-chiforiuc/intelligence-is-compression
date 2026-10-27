@@ -48,8 +48,8 @@ func leakToInterface(x, y float64) any   { return Point{x, y} }           // hea
 The measured cost, 20 million iterations:
 
 ```
-stack-allocated :   13.1 ms
-heap-allocated  :  321.1 ms      24.4x slower
+stack-allocated :   31.8 ms
+heap-allocated  :  630.5 ms      19.8x slower
 ```
 
 Plus 20 million objects for the collector to deal with afterwards.
@@ -64,7 +64,9 @@ it looks.*
 | Language | Stack allocation |
 | --- | --- |
 | Rust | default. `Box`/`Vec`/`String` opt into the heap explicitly, visible in the type. |
+| C++ | default. `new`, `make_unique` and containers opt into the heap, visible at the call site — but nothing in the type system stops you returning a pointer to a dead stack frame. |
 | Go | compiler decides via escape analysis; `-gcflags=-m` shows you. |
+| C# | classes live on the heap; `struct`s are values (stack or inline in their container). *You* choose, per type. (.NET 8's escape analysis, which could stack-allocate classes for you, is limited; later releases extend it.) |
 | Java | everything is heap in principle; the JIT's **escape analysis + scalar replacement** can eliminate allocations after inlining. Not guaranteed — an optimisation, not a language rule. |
 | TypeScript | everything is heap; V8 has similar (unreliable) escape analysis. |
 | Python | everything is heap. Even `1` is an object (small ints are interned). |
@@ -76,10 +78,21 @@ Run `bash demos/stack-heap/stack_limits.sh`:
 | Language | Depth limit | Failure mode |
 | --- | --- | --- |
 | Python | ~soft limit, `sys.setrecursionlimit` | `RecursionError` — catchable |
-| Node | ~10k frames | `RangeError` — catchable |
-| Java | ~10–50k frames | `StackOverflowError` — catchable, but do not |
+| Node | ~12.5k frames | `RangeError` — catchable |
+| Java | ~20k frames | `StackOverflowError` — catchable, but do not |
+| C# | ~523k frames (8 MB main-thread stack) | fatal `Stack overflow.`, process aborts — **not** catchable |
+| C++ | ~523k frames at `-O0` (8 MB main-thread stack) | SIGSEGV, **not** catchable as an exception |
 | Go | goroutine stacks **start at 2 KB and grow**, 1 GB ceiling | fatal, **not** recoverable |
 | Rust | 8 MB main thread | SIGSEGV/abort, **not** catchable |
+
+Two things to notice. The languages that *can* catch an overflow (Java, Node)
+have limits 25–40x smaller than the ones that cannot (C#, C++), but that is
+mostly configuration rather than design: the JVM runs `main` on a 1 MB thread
+stack (`-Xss`), V8 caps its stack at about 1 MB (`--stack-size`), while C++, C#
+and Rust use the OS's 8 MB main-thread stack and a smaller frame. And the C++
+number only exists at `-O0`: at `-O2` the compiler turns this trivial recursion
+into a loop and it never overflows at all. Depth is a property of the
+*compiler's output* and the runtime's settings, not of the language.
 
 Go's growable stacks are why it can run hundreds of thousands of goroutines: it
 does not have to reserve a big stack per concurrent task. That is a direct
@@ -98,25 +111,31 @@ runtime's fee.
 | --- | ---: | --- |
 | Go | **16.0** | nothing — type info lives in span metadata, not the object |
 | Java | 24.8 | 12-byte header: mark word (locking, `identityHashCode`, GC age) + compressed class pointer |
-| Rust | 32.1 | 16 B of data rounded up to the allocator's 32-byte size class |
-| Python `__slots__` | 48.4 | `PyObject` header: refcount + type pointer |
-| Node | 80.0 | hidden-class pointer + properties store + elements store |
-| Python plain class | **94.6** | the above **plus a per-instance `__dict__`** |
+| Rust | 32.0 | 16 B of data rounded up to the allocator's 32-byte size class |
+| C++ | 32.2 | same: 16 B of data, no header, in a 32-byte `malloc` chunk |
+| C# | 32.0 | 16-byte object header (sync block + method-table pointer) + two **uncompressed** 8-byte references |
+| Python `__slots__` | 48.3 | `PyObject` header: refcount + type pointer |
+| Node | 79.0 | hidden-class pointer + properties store + elements store |
+| Python plain class | **95.4** | the above **plus a per-instance `__dict__`** |
 
 Three things worth saying:
 
-1. **Rust is not automatically the smallest.** Go beat it here, because Rust's
-   `malloc` rounded 16 bytes up to a 32-byte size class. Allocator behaviour
-   matters as much as language semantics.
+1. **Rust and C++ are not automatically the smallest.** Go beat them both,
+   because `malloc` rounded 16 bytes up to a 32-byte size class. Allocator
+   behaviour matters as much as language semantics. (C++ can get to 16 B with a
+   pool or arena allocator — you opt in; it is not the default.)
 2. **Java's header is not waste** — it is what makes `synchronized`,
    `identityHashCode`, and generational GC possible. You are buying features.
+   Compare C#: the same two-reference object is 32 B there, because .NET has no
+   compressed references — Java's 24.8 B is a JVM option (`UseCompressedOops`),
+   not a property of managed languages.
 3. **Python's `__slots__` halves the cost.** This is the cheapest large win
    available in Python. Use `__slots__`, `@dataclass(slots=True)`, or attrs for
    anything allocated in bulk.
 
 ### Heap vs RSS — the number that gets you OOM-killed
 
-Java and Go report both, and the gap matters:
+Java, C# and Go report both, and the gap matters:
 
 - **Heap delta** answers *"what does this object cost?"*
 - **RSS delta** answers *"what must my container memory limit allow?"*
@@ -135,15 +154,15 @@ never from heap.** More on this below.
 | --- | --- | --- |
 | **Reference counting** | each object counts its references; free at zero | CPython, Swift, Rust's `Rc` |
 | **Tracing** | periodically trace from roots; anything unreached is garbage | JVM, Go, V8 |
-| **Ownership (no GC)** | compiler proves lifetimes; frees are inserted at compile time | Rust, C++ RAII |
+| **Ownership (no GC)** | compiler proves lifetimes (Rust) or scope-based destructors free deterministically (C++ RAII) | Rust, C++ |
 
 Reference counting gives **predictable, low memory** (freed the instant the
 count hits zero) and pays a **constant CPU cost on every assignment**. It also
 cannot collect cycles — which is why CPython *also* runs a cycle collector.
 
 Tracing collectors make allocation nearly free (bump a pointer in a nursery)
-and batch the cost into collections. That is why **Java allocated faster than
-Rust** in `binarytrees`.
+and batch the cost into collections. That is why **Java (and C#) allocated
+faster than Rust and C++** in `binarytrees`.
 
 ### Generational GC and the hypothesis behind it
 
@@ -162,27 +181,31 @@ Same code, same 512 MB heap, different collector. **Look at `max`, not `mean`:**
 
 | Collector | mean | p99 | max | Character |
 | --- | ---: | ---: | ---: | --- |
-| SerialGC | 1.5 µs | 5.3 µs | **12111 µs** | lowest overhead, worst pauses |
-| ParallelGC | 1.5 µs | 4.2 µs | 11865 µs | throughput king, stops the world |
-| G1GC (default) | 4.8 µs | 37.8 µs | 6972 µs | balanced, region-based, pause-target driven |
-| ZGC | 7.3 µs | 52.0 µs | **1222 µs** | concurrent; ~10x better worst case |
-| Go GOGC=100 | 5.6 µs | 32.4 µs | 1611 µs | tuned for pauses over throughput |
-| Go GOGC=400 | 4.7 µs | 16.8 µs | 856 µs | collect 4x less often |
-| Go GOGC=off | **25.9 µs** | 116 µs | 5451 µs | *slower* — see below |
+| SerialGC | 2.3 µs | 8.1 µs | **19580 µs** | lowest overhead, worst pauses |
+| ParallelGC | 2.4 µs | 7.7 µs | 19239 µs | throughput king, stops the world |
+| G1GC (default) | 2.6 µs | 8.9 µs | 10675 µs | balanced, region-based, pause-target driven |
+| ZGC | 2.9 µs | 9.9 µs | **848 µs** | concurrent; 12–23x better worst case |
+| Go GOGC=100 | 10.0 µs | 54.3 µs | 6198 µs | tuned for pauses over throughput |
+| Go GOGC=400 | 8.4 µs | 37.0 µs | 3999 µs | collect 4x less often |
+| Go GOGC=off | **19.0 µs** | 112 µs | 12682 µs | *slower* — see below |
+
+*(Median of three runs of `make demo-gc`. `max` is a single request, so it
+swings by up to 2x between runs — compare orders of magnitude, not digits. The
+JVM and Go rows are different programs: compare within a runtime, not across.)*
 
 **1. The mean barely moves.** If you only look at averages you will conclude
 collector choice does not matter. It matters enormously — just not in the mean.
 This is the single best argument for percentile monitoring you will ever get.
 
-**2. `GOGC=off` is 4.6x slower, not faster.** Turning the collector off lets the
+**2. `GOGC=off` is 1.9x slower, not faster** (mean 19.0 µs vs 10.0 µs). Turning the collector off lets the
 live heap sprawl until it no longer fits in cache and the allocator is touching
 cold pages. **"Less GC" ≠ "faster"**; a compacting collector also buys you
 *locality*. Meanwhile `GOGC=400` *is* faster than default — the optimum is
 somewhere in the middle, not at either extreme.
 
-**3. Rust is absent from this table** because it has no collector. Its cost is
-spread evenly across every `drop`, so it appears in the mean and never as a
-pause. That — not raw speed — is the real reason Rust attracts latency-critical
+**3. Rust and C++ are absent from this table** because they have no collector.
+Their cost is spread evenly across every `drop` / destructor / `free`, so it
+appears in the mean and never as a pause. That — not raw speed — is the real reason Rust attracts latency-critical
 work: **there is no pause to tune, because there is no pause.**
 
 ### Choosing a JVM collector
@@ -242,7 +265,7 @@ Rules of thumb:
 
 ## Discussion prompts
 
-1. Why did Java allocate *faster* than Rust in `binarytrees` while using 14x
+1. Why did Java allocate *faster* than Rust in `binarytrees` while using 12x
    the memory? *(Bump allocation in a nursery vs `malloc`; the memory is the
    headroom that makes bump allocation possible.)*
 2. Your service has p50 = 5 ms and p99 = 800 ms. What do you look at first?

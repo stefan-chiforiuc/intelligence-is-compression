@@ -8,8 +8,8 @@
 Draws an ASCII chart of per-batch time so the shape is visible from the back
 of the room. The story you are telling:
 
-    Rust / Go  - flat from batch 0            (AOT: all the work happened at build time)
-    Java / TS  - expensive, then plateaus     (JIT: the work happens while you watch)
+    Rust / C++ / Go - flat from batch 0       (AOT: all the work happened at build time)
+    C# / Java / TS  - expensive, then plateaus (JIT: the work happens while you watch)
     Python     - flat, but an order of magnitude higher (no machine code at all)
 """
 from __future__ import annotations
@@ -28,9 +28,20 @@ TARGETS = {
         "build": ["rustc", "-O", os.path.join(HERE, "warmup.rs"), "-o", os.path.join(OUT, "warmup_rs")],
         "run": [os.path.join(OUT, "warmup_rs")],
     },
+    "cpp": {
+        "build": ["g++", "-O2", "-std=c++20", os.path.join(HERE, "warmup.cpp"),
+                  "-o", os.path.join(OUT, "warmup_cpp")],
+        "run": [os.path.join(OUT, "warmup_cpp")],
+    },
     "go": {
         "build": ["go", "build", "-o", os.path.join(OUT, "warmup_go"), os.path.join(HERE, "warmup.go")],
         "run": [os.path.join(OUT, "warmup_go")],
+    },
+    "csharp": {
+        "build": ["dotnet", "build", os.path.join(HERE, "Warmup.csproj"), "-c", "Release",
+                  "-o", os.path.join(OUT, "cs"), "--nologo", "-v", "q",
+                  f"-p:BaseIntermediateOutputPath={os.path.join(ROOT, 'build', 'obj', 'warmup')}/"],
+        "run": ["dotnet", os.path.join(OUT, "cs", "Warmup.dll")],
     },
     "java": {
         "build": ["javac", "-d", OUT, os.path.join(HERE, "Warmup.java")],
@@ -54,7 +65,9 @@ TARGETS = {
 
 LABEL = {
     "rust": "Rust      (AOT)",
+    "cpp": "C++       (AOT)",
     "go": "Go        (AOT)",
+    "csharp": "C#        (JIT)",
     "java": "Java      (JIT)",
     "java-xint": "Java -Xint    ",
     "typescript": "TypeScript(JIT)",
@@ -99,7 +112,7 @@ def sparkline(values: list[float], lo: float, hi: float) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--langs", nargs="*",
-                    default=["rust", "go", "java", "typescript", "python"])
+                    default=["rust", "cpp", "go", "csharp", "java", "typescript", "python"])
     ap.add_argument("--xint", action="store_true",
                     help="also run the JVM with the JIT disabled")
     args = ap.parse_args()

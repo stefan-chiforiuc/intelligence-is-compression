@@ -70,9 +70,9 @@ THE THREAD THROUGH THIS WHOLE SESSION
   We have now hit the SAME bug at four different layers:
 
     Block 1  a type error caught at compile time, or not
-    Block 4  counter++ from 8 threads, losing 306,789 increments
-    Block 4c 20 users appending to one ArrayList over HTTP, losing 3,874 items
-    Block 5b 16 bookers on one database row: 192 confirmed, 13 stored
+    Block 4  counter++ from 8 threads, losing hundreds of thousands of increments
+    Block 4c 20 users appending to one ArrayList over HTTP, silently losing items
+    Block 5b 16 bookers on one database row: 192 confirmed, only ~15 stored
 
   It is one bug: READ, MODIFY, WRITE, with a window in the middle. Every layer
   has its own name for the fix, and they are all the same fix:

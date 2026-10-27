@@ -87,11 +87,11 @@ Facilitator timings, what to cut when you overrun, and expected questions:
 
 | Block | Doc | The one number |
 | --- | --- | --- |
-| **4b** When not to parallelise | [`09`](docs/09-when-to-parallelize.md) | `parallelStream` was **16x slower** on 10,000 cheap elements |
-| **4b** Virtual threads | [`09`](docs/09-when-to-parallelize.md) | **15.2x faster** on blocking I/O, **1.02x** on CPU work |
-| **4c** 20-user API race | [`09`](docs/09-when-to-parallelize.md) | **3,874 of 200,000 items lost**, HTTP 204 every time |
-| **4d** Spring Boot | [`12`](docs/12-spring-boot-cold-start-and-pools.md) | cold start **3819 ms**, 83x the bare JVM; `threads.max=10` makes a 100 ms endpoint take **1036 ms** |
-| **5b** Databases | [`10`](docs/10-databases-and-scaling.md) | pool of 200 buys **0.38x throughput for 70x latency**; naive booking **confirmed 400, stored 25** |
+| **4b** When not to parallelise | [`09`](docs/09-when-to-parallelize.md) | `parallelStream` was **~5x slower** on 10,000 cheap elements |
+| **4b** Virtual threads | [`09`](docs/09-when-to-parallelize.md) | **15.0x faster** on blocking I/O, **0.99x** on CPU work |
+| **4c** 20-user API race | [`09`](docs/09-when-to-parallelize.md) | **4,471 of 200,000 items lost**, HTTP 204 every time |
+| **4d** Spring Boot | [`12`](docs/12-spring-boot-cold-start-and-pools.md) | cold start **4626 ms**, 67x the bare JVM; `threads.max=10` makes a 100 ms endpoint take **1038 ms** |
+| **5b** Databases | [`10`](docs/10-databases-and-scaling.md) | pool of 200 buys **0.39x throughput for 64x latency**; naive booking **confirmed 192, stored ~15** (SQLite: 400 / 25) |
 
 ---
 
@@ -111,30 +111,35 @@ Facilitator timings, what to cut when you overrun, and expected questions:
    | `wordfreq` | file I/O, strings, hash map, sort | what business code actually does |
    | `startup` | process spawn + runtime boot | serverless and CLI cold starts |
 
-   All five languages implement the *same algorithm* and the harness verifies
+   All seven languages implement the *same algorithm* and the harness verifies
    their output is byte-identical. Say that out loud — it is the difference
    between a benchmark and a rumour.
 4. **(5–10 min)** Read the table together. Ask the room to spot the surprises
    *before* you explain them.
 
-**Reference numbers** (4-core Xeon @ 2.1 GHz — regenerate with `make bench`;
-see [`docs/RESULTS.md`](docs/RESULTS.md)):
+**Reference numbers** (4-vCPU cloud container, Xeon @ 2.8 GHz, median of 11 —
+regenerate with `make bench`; see [`docs/RESULTS.md`](docs/RESULTS.md)):
 
 | | mandelbrot | binarytrees | wordfreq | startup | peak RSS (trees) |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Rust | 57 ms | 318 ms | **226 ms** | **1.5 ms** | **14 MB** |
-| Go | **50 ms** | 464 ms | 299 ms | **1.5 ms** | 14 MB |
-| Java | 114 ms | 281 ms | 771 ms | 46 ms | 197 MB |
-| TypeScript | 86 ms | **240 ms** | 1290 ms | 29 ms | 98 MB |
-| Python | 2300 ms | 4350 ms | 895 ms | 11 ms | 20 MB |
+| Rust | **96 ms** | 520 ms | **394 ms** | 1.9 ms | **14.6 MB** |
+| C++ | 105 ms | 520 ms | 726 ms | **1.5 ms** | **14.6 MB** |
+| Go | 107 ms | 809 ms | 577 ms | 2.0 ms | 14.8 MB |
+| C# | 158 ms | 488 ms | 985 ms | 44 ms | 58.5 MB |
+| Java | 173 ms | **359 ms** | 1354 ms | 69 ms | 174 MB |
+| TypeScript | 145 ms | 456 ms | 1738 ms | 34 ms | 96.4 MB |
+| Python | 3855 ms | 6337 ms | 1184 ms | 18.5 ms | 21.1 MB |
 
-The four surprises that carry the session:
+The surprises that carry the session:
 
-- **Python beats Java and TypeScript at `wordfreq`** — you are benchmarking
-  libraries as much as languages.
-- **Java allocates faster than Rust** at `binarytrees`, using 14x the memory.
-- **Java's cold start is 30x Rust's.**
-- **Python's cold start beats Node's.**
+- **Python lands next to Java at `wordfreq`, and beats TypeScript** — you are
+  benchmarking libraries as much as languages. (The Python/Java order flips
+  between passes; say so.)
+- **C++ loses to Go at `wordfreq`** (726 vs 577 ms): `std::unordered_map` is not
+  a fast table. Compiled-to-machine-code is not a performance guarantee.
+- **Java allocates faster than Rust and C++** at `binarytrees`, using 12x the
+  memory.
+- **Java's cold start is ~36x Rust's; C#'s is ~23x.** Python's beats Node's.
 
 > **Facilitator note:** do not let anyone leave this block thinking the table is
 > a ranking. It is four rankings that disagree. That disagreement *is* the
@@ -154,19 +159,21 @@ transcripts.
 
 | Language | Synthetic | Real English | Gain |
 | --- | ---: | ---: | ---: |
-| Rust | 168 ms | 126 ms | 1.33× |
-| Go | 378 ms | 322 ms | 1.17× |
-| Java | 660 ms | **436 ms** | **1.51×** |
-| Python | 644 ms | 486 ms | 1.32× |
-| TypeScript | 1100 ms | 905 ms | 1.22× |
+| Rust | 405 ms | **170 ms** | **2.38×** |
+| C++ | 594 ms | 261 ms | 2.28× |
+| Go | 499 ms | 335 ms | 1.49× |
+| C# | 827 ms | 502 ms | 1.65× |
+| Java | 1131 ms | 625 ms | 1.81× |
+| Python | 1240 ms | 729 ms | 1.70× |
+| TypeScript | 1790 ms | 1428 ms | 1.25× |
 
 Three beats:
 1. **Everything got faster** on the same amount of text — fewer distinct keys,
    smaller hash map, better cache locality.
 2. **The gains are unequal**, so the gaps move. "X is N× faster at text
    processing" is incomplete until you say *on what text*.
-3. **Third and fourth place swap.** Python ties/beats Java on the synthetic
-   corpus; Java clearly wins on real English.
+3. **Places swap.** Go beats C++ on the synthetic corpus (499 vs 594 ms); C++
+   beats Go on real English (261 vs 335 ms). Same two programs, new winner.
 
 > If a change of dataset reorders your benchmark, a benchmark without its
 > dataset is not a result — it is an anecdote with numbers attached.
@@ -231,26 +238,32 @@ Deep dive: [`docs/01-typing.md`](docs/01-typing.md)
 
 **Run:** `make demo-jit`
 
-**(8 min) The three strategies:** interpreter (CPython), JIT (HotSpot, V8),
-AOT (Rust, Go). Cover tiered compilation and deoptimisation.
+**(8 min) The three strategies:** interpreter (CPython), JIT (HotSpot, RyuJIT,
+V8), AOT (Rust, C++, Go). Cover tiered compilation and deoptimisation.
 
 **(12 min) Watch the JIT work.** Measured on this machine:
 
 ```
-Rust      (AOT)  first batch  3.6 ms → steady  3.1 ms    flat  (1.2x)
-Go        (AOT)  first batch  3.6 ms → steady  3.2 ms    flat  (1.1x)
-Java      (JIT)  first batch  8.5 ms → steady  2.9 ms    2.9x faster as you watch
-TypeScript(JIT)  first batch  8.4 ms → steady  3.8 ms    2.3x faster as you watch
-Java -Xint       ─────────────  steady 47.7 ms           16x slower, JIT disabled
-Python    (int)  ─────────────  steady 101.9 ms          35x slower, no JIT at all
+Rust      (AOT)  first batch  4.6 ms → steady  4.6 ms    flat  (1.0x)
+C++       (AOT)  first batch  4.9 ms → steady  4.8 ms    flat  (1.0x)
+Go        (AOT)  first batch  5.1 ms → steady  5.1 ms    flat  (1.0x)
+C#        (JIT)  first batch  7.0 ms → steady  4.6 ms    1.5x faster as you watch
+Java      (JIT)  first batch 11.6 ms → steady  5.3 ms    2.2x faster as you watch
+TypeScript(JIT)  first batch 12.8 ms → steady  5.4 ms    2.4x faster as you watch
+Java -Xint       ─────────────  steady 49.5 ms            9x slower than Java, JIT disabled
+Python    (int)  ─────────────  steady 181.0 ms          34x slower than Java, no JIT at all
 ```
 
 Two things to land hard:
 
-1. **Java's steady state (2.9 ms) beats Rust's (3.1 ms).** "Compiled is faster
-   than JIT" is folklore. The JIT's problem is time-to-peak, not peak.
-2. **`java -Xint` is 16x slower than `java`.** That gap is what the JIT is
-   worth — and it is roughly the Python gap, for the same reason.
+1. **The JIT languages reach the AOT languages' speed.** C# (4.6 ms) ties Rust
+   (4.6 ms); Java (5.3 ms) is within 15%. "Compiled is faster than JIT" is
+   folklore at steady state. The JIT's problem is time-to-peak, not peak.
+   (On the original reference machine Java even edged Rust, 2.9 vs 3.1 ms. That
+   7% did not reproduce on new hardware — a nice lesson in how little a 7% gap
+   proves.)
+2. **`java -Xint` is 9x slower than `java`.** That gap is what the JIT is
+   worth — and Python's 34x is the same gap with a slower interpreter.
 
 **(7 min) The consequence.** Warm-up as a fraction of process life decides
 everything: Lambda and CLI tools want AOT; a 30-day service does not care.
@@ -270,7 +283,7 @@ The same function, recursive call in tail position, `sumTail(10_000_000)`:
 
 | Language | Result | Bytecode emitted |
 | --- | --- | --- |
-| Java | **`StackOverflowError`** at ~14,119 frames | `invokestatic sumTail` |
+| Java | **`StackOverflowError`** at ~14,400 frames | `invokestatic sumTail` |
 | Scala (`@tailrec`) | `50000005000000` | **`goto 0`** |
 | Kotlin (`tailrec`) | `50000005000000` | **`goto 0`** |
 
@@ -316,8 +329,8 @@ go build -gcflags='-m' demos/stack-heap/escape.go
   escape.go:40:7: &Point{...} escapes to heap
 ```
 ```
-stack-allocated :   13.1 ms
-heap-allocated  :  321.1 ms      24.4x slower, plus 20M objects for the GC
+stack-allocated :   31.8 ms
+heap-allocated  :  630.5 ms      19.8x slower, plus 20M objects for the GC
 ```
 
 **(7 min) What one object costs.** 1,000,000 live nodes, two references each —
@@ -327,26 +340,34 @@ the *data* is 16 bytes in every language:
 | --- | ---: | --- |
 | Go | **16.0** | two pointers, no header at all |
 | Java | 24.8 | 12-byte header + 2 compressed refs + padding |
-| Rust | 32.1 | 16 B data, rounded to the allocator's 32-byte class |
-| Python (`__slots__`) | 48.4 | PyObject header + two pointers |
-| Node | 80.0 | hidden-class ptr + properties + elements |
-| Python (plain class) | **94.6** | the per-instance `__dict__` |
+| Rust | 32.0 | 16 B data, rounded to the allocator's 32-byte class |
+| C++ | 32.2 | same: 16 B data, no header, malloc's 32-byte chunk |
+| C# | 32.0 | 16-byte object header + 2 uncompressed 8-byte refs |
+| Python (`__slots__`) | 48.3 | PyObject header + two pointers |
+| Node | 79.0 | hidden-class ptr + properties + elements |
+| Python (plain class) | **95.4** | the per-instance `__dict__` |
 
 **(12 min) Collectors, judged by tail latency.** Point at `max`, not `mean`:
 
 | Collector | mean | p99 | max |
 | --- | ---: | ---: | ---: |
-| SerialGC | 1.5 µs | 5.3 µs | **12111 µs** |
-| ParallelGC | 1.5 µs | 4.2 µs | 11865 µs |
-| G1GC (default) | 4.8 µs | 37.8 µs | 6972 µs |
-| ZGC | 7.3 µs | 52.0 µs | **1222 µs** |
-| Go GOGC=100 | 5.6 µs | 32.4 µs | 1611 µs |
-| Go GOGC=400 | 4.7 µs | 16.8 µs | 856 µs |
-| Go GOGC=off | **25.9 µs** | 116 µs | 5451 µs |
+| SerialGC | 2.3 µs | 8.1 µs | **19580 µs** |
+| ParallelGC | 2.4 µs | 7.7 µs | 19239 µs |
+| G1GC (default) | 2.6 µs | 8.9 µs | 10675 µs |
+| ZGC | 2.9 µs | 9.9 µs | **848 µs** |
+| Go GOGC=100 | 10.0 µs | 54.3 µs | 6198 µs |
+| Go GOGC=400 | 8.4 µs | 37.0 µs | 3999 µs |
+| Go GOGC=off | **19.0 µs** | 112 µs | 12682 µs |
+
+*(Median of three runs. `max` is one request, so it swings ±2x between runs;
+read it in orders of magnitude. The JVM and Go rows are different programs —
+compare within a runtime, not across.)*
 
 1. **The mean barely moves** — best argument for percentile monitoring you'll get.
-2. **`GOGC=off` is *slower*.** The heap sprawls out of cache. "Less GC" ≠ "faster".
-3. **Rust is absent** because it has no collector — its cost is in the mean, never a pause.
+2. **`GOGC=off` is *slower*** (1.9x the mean). The heap sprawls out of cache.
+   "Less GC" ≠ "faster".
+3. **Rust and C++ are absent** because they have no collector — their cost is in
+   the mean, never a pause.
 
 **(5 min) The container rule.** `-XX:MaxRAMPercentage=75`, `GOMEMLIMIT`.
 Size limits from **RSS**, never from heap.
@@ -369,20 +390,24 @@ you computing?** Waiting → concurrency (async, virtual threads). Computing →
 parallelism (real threads on real cores). `async` gives CPU work exactly 0x.
 
 **(12 min) Part 1 — can you use all your cores?** Same Mandelbrot kernel as
-Block 0, `n=2000`, 4-core machine:
+Block 0, `n=2000`, 4-vCPU machine:
 
 | Language | 1 worker | 2 workers | 4 workers | scaling |
 | --- | ---: | ---: | ---: | ---: |
-| Rust | 234 ms | 117 ms | 87 ms | **2.69x** |
-| Go | 245 ms | 126 ms | 113 ms | 2.18x |
-| Java | 308 ms | 167 ms | 150 ms | 2.05x |
-| TypeScript (workers) | 261 ms | 202 ms | 177 ms | 1.47x |
-| **Python (threads)** | 8718 ms | 9183 ms | 9307 ms | **0.94x** |
-| **Python (processes)** | 8840 ms | 4489 ms | 3353 ms | 2.64x |
+| Rust | 377 ms | 191 ms | 139 ms | **2.71x** |
+| C++ | 386 ms | 210 ms | 164 ms | 2.35x |
+| Go | 411 ms | 211 ms | 152 ms | 2.70x |
+| C# | 380 ms | 191 ms | 142 ms | 2.67x |
+| Java | 442 ms | 234 ms | 192 ms | 2.31x |
+| TypeScript (workers) | 380 ms | 251 ms | 227 ms | 1.67x |
+| **Python (threads)** | 15433 ms | 16891 ms | 16703 ms | **0.92x** |
+| **Python (processes)** | 15260 ms | 7783 ms | 5709 ms | 2.67x |
 
 - **The flat Python threads row is the GIL** — eight threads take turns. This is
   the single most surprising fact for most juniors in the room.
-- **Processes scale** (0.94x → 2.64x) at the cost of spawn + pickling.
+- **Processes scale** (0.92x → 2.67x) at the cost of spawn + pickling.
+- **Four vCPUs gave ~2.7x at best**, not 4x. This is a KVM guest on shared cloud
+  hardware, so the vCPUs are not dedicated cores. Say so.
 - **Nobody hits 4.00x.** Amdahl's law is not a suggestion.
 
 **(13 min) Part 2 — what happens when you share state?** Eight threads,
@@ -390,19 +415,28 @@ Block 0, `n=2000`, 4-core machine:
 
 | Language | Result | When you find out |
 | --- | --- | --- |
-| Go | 493,211 — **lost 306,789** | run time, only with `-race` |
-| Java (plain) | 231,766 | run time, never automatically |
-| Java (**`volatile`**) | 282,105 — **still broken** | run time |
-| Node (SharedArrayBuffer) | 509,242 | run time |
+| Go | 379,659 — **lost 420,341** | run time, only with `-race` |
+| Java (plain) | 340,369 | run time, never automatically |
+| Java (**`volatile`**) | 325,259 — **still broken** | run time |
+| C# (plain) | 604,277 | run time, never automatically |
+| C# (**`volatile`**) | 572,459 — **still broken** | run time |
+| C++ (`-O0`) | 366,562 | run time, with `-fsanitize=thread` |
+| C++ (`-O2`) | **800,000 — "correct"** | the bug is still there (UB) |
+| Node (SharedArrayBuffer) | 644,448 | run time |
 | **Rust** | **does not compile** | **compile time** |
 
 Three beats:
 
 1. **`counter++` is never one operation** — load, add, store.
 2. **The `volatile` trap.** It buys *visibility*, not *atomicity*. Juniors
-   reach for it constantly; the demo shows it losing 517,895 increments.
-3. **Rust is the concurrency twin of Block 1.** `error[E0499]`. Same shape as
-   the typing demo: four languages compile the broken program, one refuses.
+   reach for it constantly; the demo shows it losing 474,741 increments in Java
+   and 227,541 in C#.
+3. **C++ makes the point about undefined behaviour.** The same racy source
+   loses 433k increments at `-O0` and prints the *right* answer at `-O2`, where
+   GCC folds each thread's loop into one `add`. A race that does not reproduce
+   is still a race — and `-fsanitize=thread` still catches it.
+4. **Rust is the concurrency twin of Block 1.** `error[E0499]`. Same shape as
+   the typing demo: six languages compile the broken program, one refuses.
    Then show the fix — the strategy goes *in the type*: `Mutex<u64>`, `AtomicU64`.
 
 **The Python GIL question, answered honestly.** The demo runs two experiments:
@@ -438,18 +472,23 @@ Deep dive: [`docs/09-when-to-parallelize.md`](docs/09-when-to-parallelize.md)
 *should* — because `.parallelStream()` is one word longer than `.stream()`, so
 the cost is invisible at the call site.
 
-**(10 min) The crossover.** Measured, 4 cores:
+**(10 min) The crossover.** Measured, 4 cores, median of 5 runs:
 
 | elements | cheap op (multiply-add) | expensive op (~50 float iters) |
 | ---: | --- | --- |
-| 1,000 | 0.35x — **loses** | 0.25x — **loses** |
-| 10,000 | **0.06x — 16x SLOWER** | 1.95x — crossover |
-| 100,000 | 0.57x — loses | 3.47x — wins |
-| 1,000,000 | 1.18x — crossover | 3.68x — wins |
+| 100 | — | 0.45x — **loses** |
+| 1,000 | 0.35x — **loses** | 0.81x — **loses** |
+| 10,000 | **0.20x — 5x SLOWER** | 1.95x — crossover |
+| 100,000 | unstable (0.6x–11.8x) | 3.17x — wins |
+| 1,000,000 | unstable (0.7x–1.7x) | 3.73x — wins |
+| 10,000,000 | 2.08x — wins | — |
 
 > The crossover is not at a fixed element count. It is at a fixed amount of
-> **total work**. Cheap work crosses at ~1,000,000 elements; expensive work at
-> ~10,000. A **100x difference**, from cost-per-element alone.
+> **total work**. Cheap work only reliably wins from ~10,000,000 elements;
+> expensive work crosses at ~10,000. A **100x-1000x difference**, from
+> cost-per-element alone. The cheap column is also *unstable* in the middle:
+> JIT state moves the sequential baseline from run to run. Say that out loud —
+> it is a second reason to measure on your own machine.
 >
 > **Rule:** `N x cost-per-element` must be **>> ~100 µs** of setup.
 
@@ -463,9 +502,9 @@ one in the JVM. Never do I/O in one.
 
 | Experiment | Platform threads | Virtual threads | |
 | --- | ---: | ---: | --- |
-| 8 CPU-bound tasks | 30.8 ms | 31.3 ms | **1.02x — no gain** |
-| 10,000 blocking I/O tasks | 2604.8 ms (200-thread pool) | 171.8 ms | **15.2x faster** |
-| Creating 100,000 threads | ~28 s, ~100 GB stack (would not fit) | **69 ms, +43 MB** | |
+| 8 CPU-bound tasks | 46.0 ms | 45.7 ms | **0.99x — no gain** |
+| 10,000 blocking I/O tasks | 2560.3 ms (200-thread pool) | 170.5 ms | **15.0x faster** |
+| Creating 100,000 threads | ~33 s, ~100 GB stack (would not fit) | **142 ms, +60 MB** | |
 
 Then the three traps, the third of which sets up the database block:
 1. `parallelStream` does not use virtual threads — the common-pool trap remains.
@@ -496,11 +535,11 @@ items.add(payload);                                     // in a request handler
 
 | Implementation | actual / 200,000 | ms | verdict |
 | --- | ---: | ---: | --- |
-| `ArrayList` (no sync) | 196,126 | 572 | **LOST 3,874 items** |
-| `ArrayList` + `synchronized` | 200,000 | 332 | correct |
-| `Collections.synchronizedList` | 200,000 | 288 | correct |
-| `CopyOnWriteArrayList` | 200,000 | **16,080** | correct, **112x slower** |
-| `ConcurrentLinkedQueue` | 200,000 | **143** | correct, fastest |
+| `ArrayList` (no sync) | 195,529 | 874 | **LOST 4,471 items** |
+| `ArrayList` + `synchronized` | 200,000 | 432 | correct |
+| `Collections.synchronizedList` | 200,000 | 285 | correct |
+| `CopyOnWriteArrayList` | 200,000 | **30,340** | correct, **170x slower** |
+| `ConcurrentLinkedQueue` | 200,000 | **178** | correct, fastest |
 
 Nothing crashed. The API returned **204 to every caller**. All 20 users believe
 their items were saved.
@@ -520,8 +559,8 @@ Show both doors: **with `move`** the Vec is moved into the first handler;
 **without `move`** the closure may outlive the borrow (E0373). Neither compiles.
 The fix puts the strategy in the type — `Arc<Mutex<Vec<String>>>` — and you can
 forget neither to lock (data is inside the mutex) nor to unlock (guard drops on
-scope exit, even on panic). Measured: **110 ms**, faster than Java's
-`synchronized` at 332 ms.
+scope exit, even on panic). Measured: **139 ms**, faster than Java's
+`synchronized` at 432 ms.
 
 **State the limits:** Rust prevents *data* races, not deadlocks or logic races;
 the demo uses one global lock, which is the worst design for throughput; and
@@ -539,16 +578,19 @@ Deep dive: [`docs/12-spring-boot-cold-start-and-pools.md`](docs/12-spring-boot-c
 
 **(8 min) Cold start.** Median of 3, same machine:
 
-| | Cold start | vs Go |
+| | Cold start | vs C++ / Rust / Go |
 | --- | ---: | ---: |
-| Go / Rust `hello` | 1.5 ms | 1x |
-| bare JVM `Hello.java` | 46 ms | 31x |
-| **Spring Boot** | **3819 ms** | **~2500x** |
+| C++ / Rust / Go `hello` | 1.5 ms | 1x |
+| bare .NET `Hello.cs` | 44 ms | 28x |
+| bare JVM `Hello.java` | 69 ms | 45x |
+| **Spring Boot** | **4626 ms** | **~3000x** |
 
-`-XX:TieredStopAtLevel=1` → 3535 ms; lazy init → 3392 ms; `-Xshare:off` →
-3996 ms (proving CDS is already earning its keep).
+`-XX:TieredStopAtLevel=1` → 4354 ms; lazy init → 4114 ms; `-Xshare:off` →
+4771 ms (proving CDS is already earning its keep). These four configurations
+sit within ~15% of each other: on this machine none of the tuning flags is a
+game-changer.
 
-**83x the bare JVM — and this app is tiny.** Four endpoints, no security, no
+**67x the bare JVM — and this app is tiny.** Four endpoints, no security, no
 JPA, no Kafka. Real enterprise services are routinely 15–60 s.
 
 > **Ask the room: "what is your app's startup time?"** Almost nobody knows.
@@ -561,23 +603,23 @@ JPA, no Kafka. Real enterprise services are routinely 15–60 s.
 
 | Configuration | Throughput | p50 | p99 | Thread |
 | --- | ---: | ---: | ---: | --- |
-| `threads.max=10` | **96 r/s** | **1036 ms** | 1052 ms | platform |
-| `threads.max=50` | 460 r/s | 206 ms | 231 ms | platform |
-| `threads.max=200` (default) | 689 r/s | 113 ms | 163 ms | platform |
-| virtual threads | 719 r/s | 114 ms | **140 ms** | **virtual** |
+| `threads.max=10` | **96 r/s** | **1038 ms** | 1055 ms | platform |
+| `threads.max=50` | 442 r/s | 205 ms | 237 ms | platform |
+| `threads.max=200` (default) | 507 r/s | 130 ms | 198 ms | platform |
+| virtual threads | 610 r/s | 121 ms | **166 ms** | **virtual** |
 
 Four beats:
 
 1. **Little's law predicted the machine.** 10 threads ÷ 0.1 s = 100 r/s
-   predicted, 96 measured. And note p50 = **1036 ms for a 100 ms endpoint** —
+   predicted, 96 measured. And note p50 = **1038 ms for a 100 ms endpoint** —
    over 90% is queue time your APM does not show, because most instrumentation
    starts the clock at the controller.
 2. **Raising it helps because these threads are sleeping.** Run the same sweep
    against `/cpu` and it flattens at core count. Waiting vs computing, again.
 3. **Virtual threads remove the ceiling** — and the *serving thread* column
    flips to `virtual`, which is the proof it switched on. But the gain over a
-   tuned 200-thread pool is modest (719 vs 689 r/s). Say that honestly: the win
-   is that you stop guessing the number, not raw throughput.
+   tuned 200-thread pool is modest (610 vs 507 r/s, +20%). Say that honestly:
+   the win is that you stop guessing the number, not raw throughput.
 4. **Your 200-thread pool was an accidental rate limiter.** It guaranteed you
    never had >200 requests reaching for a Hikari pool of 10. Remove it without
    a deliberate limit and the next bottleneck finds out. Show it live:
@@ -596,33 +638,35 @@ connection pool → request threads → replicas. Most teams do it backwards.
 
 | Language | cold start | baseline RSS | image (typical) |
 | --- | ---: | ---: | ---: |
-| Rust | **1.5 ms** | 14 MB | 5–10 MB |
-| Go | **1.5 ms** | 14 MB | 10–20 MB |
-| Python | 11 ms | 14 MB | 50–120 MB |
-| Node | 29 ms | 44 MB | 60–150 MB |
-| Java | 46 ms | 40 MB | 180–400 MB |
+| C++ | **1.5 ms** | 14.6 MB | 5–30 MB (static / distroless-cc) |
+| Rust | 1.9 ms | 14.6 MB | 5–10 MB |
+| Go | 2.0 ms | 14.6 MB | 10–20 MB |
+| Python | 18.5 ms | 14.6 MB | 50–120 MB |
+| Node | 34 ms | 42.8 MB | 60–150 MB |
+| C# | 44 ms | 23.3 MB | 80–220 MB (.NET runtime image) |
+| Java | 69 ms | 40.1 MB | 180–400 MB |
 
 Work the multipliers: serverless pays it per scale-out; autoscaling speed *is*
 cold start; deploy time = cold start × pods; and **baseline RSS decides bin
 packing**, which is most of your bill (100 replicas: 1 node for Go, 10 for Java).
 
 Mitigations so nobody leaves thinking "never use Java": CDS is already on and
-worth ~31% (`-Xshare:off` to prove it), GraalVM native-image → ~5 ms, or just
-**keep the JVM warm**.
+worth ~37% (`-Xshare:off` to prove it), GraalVM native-image → ~5 ms, or just
+**keep the JVM warm**. The .NET analogues are ReadyToRun and Native AOT.
 
 **(8 min) Carbon.** `wordfreq` at 50M executions/month:
 
 ```
-rust        225 ms CPU     3.93 kg CO2e/month
-typescript 1504 ms CPU    26.23 kg CO2e/month
-→ switching saves ~22 kg/month = 0.27 t/year
+rust        388 ms CPU     6.76 kg CO2e/month
+typescript 1981 ms CPU    34.55 kg CO2e/month
+→ switching saves ~28 kg/month = 0.33 t/year
 ```
 
 Then puncture it, in order:
-1. **0.27 t/year is less than one transatlantic flight.** At low volume,
+1. **0.33 t/year is less than half of one transatlantic flight.** At low volume,
    language choice is climate noise.
-2. **Region beats language by ~17x.** Run `--region eu-north-1` live: 26.23 kg
-   → 1.50 kg with zero code change.
+2. **Region beats language by ~17x.** Run `--region eu-north-1` live: 34.55 kg
+   → 1.97 kg with zero code change. (Rust over TypeScript is 5.1x.)
 3. **The real argument is density**, not CPU — 1/10th the memory is 1/10th the
    machines, and the embodied carbon you never bought.
 4. **A carbon number without its assumptions is a vibe.**
@@ -665,12 +709,14 @@ A connection is not a socket: in PostgreSQL it is a whole OS **process**
 
 | pool | throughput | p99 |
 | ---: | ---: | ---: |
-| **1** | 68 q/s | **620 ms** |
-| 8 | 70 q/s | 628 ms |
-| 32 | 77 q/s | **947 ms** |
+| **1** | 39 q/s | 1159 ms |
+| 8 | 43 q/s | 1088 ms |
+| 32 | 43 q/s | **1584 ms** |
 
-**A pool of ONE gets 88% of the throughput of a pool of 32, and p99 is 53%
-better.** Past saturation, connections buy variance, not capacity. Then
+**A pool of ONE gets ~90% of the throughput of a pool of 32, and its p99 is 27%
+lower.** Past saturation, connections buy variance, not capacity. (Median of 3
+runs; the p99 column is noisy and not monotonic — pool 48 came back down — so
+claim only what the table shows.) Then
 `docker update --cpus=2 lang-training-db` and re-run — the plateau rises,
 proving pool size follows the *database's* capacity, not your traffic.
 
@@ -678,12 +724,12 @@ The simulation (`make demo-db-sim`) shows the same shape more dramatically:
 
 | pool | throughput | p50 |
 | ---: | ---: | ---: |
-| **8** | **1883 q/s** | **4.2 ms** |
-| 32 | 1595 q/s | 20.0 ms |
-| 128 | 1009 q/s | 140.9 ms |
-| 200 | 723 q/s | 289.7 ms |
+| **8** | **1873 q/s** | **4.1 ms** |
+| 32 | 1600 q/s | 20.0 ms |
+| 128 | 1018 q/s | 140.9 ms |
+| 200 | 736 q/s | 263.3 ms |
 
-> **Pool 200 buys 0.38x the throughput for 70x the p50 latency.**
+> **Pool 200 buys 0.39x the throughput for 64x the p50 latency.**
 
 The queue does not vanish when you enlarge the pool — it **moves**, out of your
 app where it is visible and sheddable, into the database where it is not.
@@ -693,12 +739,12 @@ Formula: `connections = (cores * 2) + spindles` → ~17 for an 8-core DB, not 20
 
 | strategy | confirmed | stored | verdict |
 | --- | ---: | ---: | --- |
-| 1. no transaction | **192** | **13** | told 192 users yes, stored 13 |
-| 2. txn @ READ COMMITTED | **192** | **13** | *still* wrong |
+| 1. no transaction | **192** | **15** | told 192 users yes, stored 15 |
+| 2. txn @ READ COMMITTED | **192** | **14** | *still* wrong |
 | 3. `SELECT … FOR UPDATE` | 100 | 100 | pessimistic |
 | 4. optimistic (version) | 100 | 100 | detect + retry |
 | 5. single atomic `UPDATE` | 100 | 100 | fastest |
-| 6. REPEATABLE READ + retry | 100 | 100 | correct — **787** aborts absorbed |
+| 6. REPEATABLE READ + retry | 100 | 100 | correct — **805** aborts absorbed |
 | 7. count-then-`INSERT` | 113 | 113 | **OVERSOLD by 13** |
 | 8. pre-allocated seat rows | 100 | 100 | **impossible to oversell** |
 
@@ -871,5 +917,7 @@ make bench       # regenerates docs/RESULTS.md with YOUR numbers
 make verify      # runs all nine demos end to end
 ```
 
-The numbers quoted above are from a 4-core Xeon @ 2.1 GHz. Yours will differ —
-the *ratios* and the *shape* are what the session is about, and those hold up.
+The numbers quoted above are from a 4-vCPU cloud container (Xeon @ 2.8 GHz).
+Yours will differ — the large *ratios* and the *shape* are what the session is
+about, and those hold up. Small gaps (under ~10-15%) do not: one JIT-vs-AOT
+difference and one Python-vs-Java ordering both flipped when we re-measured.

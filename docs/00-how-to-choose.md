@@ -55,11 +55,11 @@ This is where the AOT/JIT material pays off:
 
 | Shape | Implication | Good fits |
 | --- | --- | --- |
-| Short-lived: CLI, Lambda, CI step, cron | Cold start dominates. AOT. | Rust, Go, (Python for scripts) |
-| Long-lived: HTTP service, consumer, daemon | Warm-up amortises to zero. JIT is fine and often *better*. | Java, Node, Go |
-| Scale-to-zero / spiky traffic | Cold start is your latency SLO. | Rust, Go |
-| Huge heap, latency-critical | You are choosing a **collector**, not a language. | Java + ZGC, Go, Rust |
-| Memory-constrained (edge, sidecar, 400 replicas) | Footprint per instance × replicas. | Rust, Go |
+| Short-lived: CLI, Lambda, CI step, cron | Cold start dominates. AOT. | Rust, C++, Go, (Python for scripts) |
+| Long-lived: HTTP service, consumer, daemon | Warm-up amortises to zero. JIT is fine and often *better*. | Java, C#, Node, Go |
+| Scale-to-zero / spiky traffic | Cold start is your latency SLO. | Rust, C++, Go |
+| Huge heap, latency-critical | You are choosing a **collector**, not a language. | Java + ZGC, Go, Rust, C++ |
+| Memory-constrained (edge, sidecar, 400 replicas) | Footprint per instance × replicas. | Rust, C++, Go |
 
 ### 5. *Only now:* is it actually CPU-bound?
 
@@ -68,9 +68,11 @@ an HTTP call, or a queue. For those, language execution speed is close to
 irrelevant — a 40x faster language makes a 2 ms difference in a 200 ms request.
 
 **Evidence from this repo:** in `wordfreq`, the workload closest to real
-business code, Python (897 ms) *beats* Java (771 ms → close) and clearly beats
-TypeScript (1290 ms) — despite being 46x slower than Go at raw loops. Because
-the hot path is `str.split` and `Counter`, which are C.
+business code, Python (1184 ms) lands right next to Java (1354 ms) and clearly
+beats TypeScript (1738 ms) — despite being ~40x slower than Rust at raw loops.
+Because the hot path is `str.split` and `Counter`, which are C. (The Python/Java
+order is not stable between runs, which is itself the point: they are the same
+speed for practical purposes.)
 
 So the real question is: **which 5% of my code is hot, and can I make just that
 part fast?** Very often you can, without changing language:
@@ -81,19 +83,19 @@ loop (anything).
 
 ## The trade-off cheat sheet
 
-| | Rust | Go | Java | TypeScript | Python |
-| --- | --- | --- | --- | --- | --- |
-| Typing | static, strong, strictest | static, strong | static, strong | static → **erased at run time** | dynamic, strong |
-| Compilation | AOT (slow builds) | AOT (very fast builds) | JIT (+AOT via Graal) | JIT (V8) | interpreted |
-| Memory management | ownership, no GC | concurrent GC, pause-optimised | many GCs, tunable | generational GC (V8) | refcount + cycle GC |
-| Cold start | ~1.5 ms | ~1.5 ms | ~46 ms | ~29 ms | ~11 ms |
-| Baseline RSS | ~14 MB | ~14 MB | ~40 MB | ~44 MB | ~14 MB |
-| Bytes per small object | 32 | 16 | 25 | 80 | 48 (`__slots__`) / 95 |
-| Raw loop speed | 1.0x | 1.0x | 1.2x warm | 1.3x warm | 35–46x slower |
-| Concurrency | threads + async, compiler-checked | goroutines + channels | threads, virtual threads (21+) | single-threaded + event loop | GIL (threads ≠ parallel) |
-| Best at | correctness under constraint | networked services, tooling | large long-lived systems | anything with a browser | glue, data, ML, scripts |
-| Worst at | iteration speed, hiring | expressiveness, generics-heavy code | cold start, footprint | CPU-bound work | CPU-bound work |
-| Learning curve | steep | gentle | moderate | moderate | gentle |
+| | Rust | C++ | Go | C# | Java | TypeScript | Python |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Typing | static, strong, strictest | static, but C-style casts and undefined behaviour | static, strong | static, strong (null checks opt-in) | static, strong | static → **erased at run time** | dynamic, strong |
+| Compilation | AOT (slow builds at scale) | AOT (slow builds, headers) | AOT (very fast builds) | JIT (+ ReadyToRun / Native AOT) | JIT (+AOT via Graal) | JIT (V8) | interpreted |
+| Memory management | ownership, no GC | RAII / manual, no GC | concurrent GC, pause-optimised | generational GC, tunable | many GCs, tunable | generational GC (V8) | refcount + cycle GC |
+| Cold start | ~1.9 ms | ~1.5 ms | ~2.0 ms | ~44 ms | ~69 ms | ~34 ms | ~18.5 ms |
+| Baseline RSS | ~15 MB | ~15 MB | ~15 MB | ~23 MB | ~40 MB | ~43 MB | ~15 MB |
+| Bytes per small object | 32 | 32 | 16 | 32 | 25 | 80 | 48 (`__slots__`) / 95 |
+| Raw loop speed (warm) | 1.0x | 1.0x | 1.1x | 1.0x | 1.2x | 1.2x | ~40x slower |
+| Concurrency | threads + async, compiler-checked | threads + async, **you** check | goroutines + channels | threads, `Task`/`async`, thread pool | threads, virtual threads (21+) | single-threaded + event loop | GIL (threads ≠ parallel) |
+| Best at | correctness under constraint | squeezing the hardware; huge existing codebases | networked services, tooling | large long-lived systems, games (Unity) | large long-lived systems | anything with a browser | glue, data, ML, scripts |
+| Worst at | iteration speed, hiring | memory-safety footguns; build and dependency tooling | expressiveness, generics-heavy code | cold start without AOT | cold start, footprint | CPU-bound work | CPU-bound work |
+| Learning curve | steep | steep | gentle | moderate | moderate | moderate | gentle |
 
 *(Numbers measured on the reference machine; see [RESULTS.md](RESULTS.md).)*
 
@@ -103,13 +105,14 @@ loop (anything).
 
 | Claim | Verdict |
 | --- | --- |
-| "Compiled languages are faster than JIT languages" | **Folklore.** Java's steady state beat Rust in our warm-up demo (2.9 ms vs 3.1 ms). The JIT's problem is time-to-peak, not peak. |
-| "Python is slow" | **Depends.** 46x slower at raw loops; competitive at real workloads where the hot path is C. |
+| "Compiled languages are faster than JIT languages" | **Folklore, at steady state.** In our warm-up demo C# (JIT) tied Rust (4.6 ms each) and Java was within 15% (5.3 ms). The JIT's problem is time-to-peak, not peak. |
+| "C++ is the fastest, full stop" | **Depends on the library.** At `wordfreq` C++ (726 ms) was slower than Go (577 ms) and nearly 2x Rust (394 ms): `std::unordered_map` is a general-purpose, node-based table. |
+| "Python is slow" | **Depends.** ~40x slower at raw loops; competitive at real workloads where the hot path is C. |
 | "Static types prevent bugs" | **Real, but bounded.** They protect the inside of your program. At the boundary (JSON/HTTP/DB) they do nothing unless you validate. |
 | "TypeScript makes JavaScript type-safe at run time" | **False.** Types are erased. Our demo proves it in one line. |
-| "Rust is always the memory-efficient choice" | **Mostly.** But Go used *less* per object (16 B vs 32 B) because of allocator size classes. |
-| "Garbage collection makes a language slow" | **Folklore.** Java *allocated faster than Rust* in `binarytrees`. GC costs you memory and tail latency, not throughput. |
-| "Turning the GC off makes it faster" | **False.** `GOGC=off` was 4.6x *slower* — the heap sprawls out of cache. |
+| "Rust (or C++) is always the memory-efficient choice" | **Mostly.** But Go used *less* per object (16 B vs 32 B) because of allocator size classes. |
+| "Garbage collection makes a language slow" | **Folklore.** Java (359 ms) and C# (488 ms) *allocated faster than Rust and C++* (520 ms) in `binarytrees`. GC costs you memory (174 MB vs 15 MB) and tail latency, not throughput. |
+| "Turning the GC off makes it faster" | **False.** `GOGC=off` was 1.9x *slower* — the heap sprawls out of cache. |
 | "Rewriting in a faster language is good for the planet" | **Usually noise.** Changing cloud region beat changing language by ~17x in our estimate. |
 | "Use the right tool for the job" | **True but useless** unless you can name the job's shape. That is what questions 1–5 are for. |
 
