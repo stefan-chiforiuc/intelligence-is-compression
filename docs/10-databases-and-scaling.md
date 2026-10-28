@@ -72,20 +72,32 @@ does not care whether the resource is a disk or a CPU.
 ### Measured on a real 1-CPU PostgreSQL
 
 `python3 demos/db-scaling/real_pool.py` — 40 concurrent users, CPU-bound
-queries, against the 1-CPU container:
+queries, against a 1-CPU PostgreSQL 16 (median of three runs):
 
 | pool size | throughput | p50 | p99 |
 | ---: | ---: | ---: | ---: |
-| **1** | 68 q/s | 588 ms | **620 ms** |
-| 2 | 72 q/s | 542 ms | 635 ms |
-| 4 | 75 q/s | 495 ms | 661 ms |
-| 8 | 70 q/s | 561 ms | 628 ms |
-| 16 | 77 q/s | 481 ms | 693 ms |
-| 32 | 77 q/s | 424 ms | **947 ms** |
+| **1** | 39 q/s | 996 ms | 1159 ms |
+| 2 | 40 q/s | 982 ms | 1109 ms |
+| 4 | 42 q/s | 901 ms | 1122 ms |
+| 8 | 43 q/s | 920 ms | 1088 ms |
+| 16 | 43 q/s | 851 ms | 1188 ms |
+| 32 | 43 q/s | 809 ms | **1584 ms** |
+| 48 | 42 q/s | 938 ms | 1126 ms |
 
-**Throughput is flat — a 1.14× spread across a 32× range of pool sizes. A pool
-of ONE reaches 88% of what a pool of 32 achieves.** Meanwhile p99 degrades by
-53%.
+> *How this was measured:* this machine had no Docker daemon, so the database
+> was a local PostgreSQL 16 with the compose file's settings
+> (`max_connections=50`, `shared_buffers=128MB`, no parallel query) pinned to a
+> single core with `taskset`, and the load generator pinned to the other three.
+> That is the same idea as `cpus: 1.0` but not the same machine as the
+> container, which is why the absolute throughput is lower than earlier
+> versions of this page showed (68–77 q/s).
+
+**Throughput is flat — a 1.10× spread across a 48× range of pool sizes. A pool
+of ONE reaches 90% of what the larger pools achieve.** The p99 column is the
+subtle part, and it is *not* monotonic: pool 32 had the worst p99 in all three
+runs (1.5–1.7 s against 1.0–1.2 s for pools of 1–8, i.e. 30–50% worse), but
+pool 48 came back down. Say what the table shows — a clear p99 penalty at one
+pool size, not a smooth curve.
 
 That is the whole lesson in one table: past the point where the database is
 saturated, **extra connections buy variance, not capacity**. The HikariCP
@@ -103,16 +115,16 @@ application's traffic.
 
 | pool size | throughput | p50 | p99 | in-flight |
 | ---: | ---: | ---: | ---: | ---: |
-| 2 | 475 q/s | 4.2 ms | 1965 ms | 2 |
-| 4 | 953 q/s | 4.2 ms | 979 ms | 4 |
-| **8** | **1883 q/s** | **4.2 ms** | 474 ms | 8 |
-| 16 | 1815 q/s | 8.8 ms | 482 ms | 16 |
-| 32 | 1595 q/s | 20.0 ms | 515 ms | 32 |
-| 64 | 1298 q/s | 50.1 ms | 540 ms | 64 |
-| 128 | 1009 q/s | 140.9 ms | 735 ms | 128 |
-| 200 | 723 q/s | 289.7 ms | 292 ms | 200 |
+| 2 | 473 q/s | 4.2 ms | 2009 ms | 2 |
+| 4 | 949 q/s | 4.2 ms | 981 ms | 4 |
+| **8** | **1873 q/s** | **4.1 ms** | 471 ms | 8 |
+| 16 | 1793 q/s | 8.8 ms | 492 ms | 16 |
+| 32 | 1600 q/s | 20.0 ms | 503 ms | 32 |
+| 64 | 1296 q/s | 50.1 ms | 540 ms | 64 |
+| 128 | 1018 q/s | 140.9 ms | 717 ms | 128 |
+| 200 | 736 q/s | 263.3 ms | 292 ms | 200 |
 
-> **Pool size 200 buys 0.38× the throughput for 70× the p50 latency.**
+> **Pool size 200 buys 0.39× the throughput for 64× the p50 latency.**
 
 Throughput peaks at the database's *real* parallelism and then **declines**.
 Past that point extra connections do not create capacity — they create a bigger
@@ -219,14 +231,18 @@ That is the **lost update** anomaly, and it is invisible in every log you have.
 
 | strategy | confirmed | stored | ms | verdict |
 | --- | ---: | ---: | ---: | --- |
-| 1. no transaction | **192** | **13** | 187 | told 192 users yes, stored 13 |
-| 2. txn @ READ COMMITTED | **192** | **13** | 214 | *still* broken |
-| 3. `SELECT … FOR UPDATE` | 100 | 100 | 681 | correct |
-| 4. optimistic (version) | 100 | 100 | 706 | correct |
-| 5. single atomic `UPDATE` | 100 | 100 | **165** | correct, fastest |
-| 6. REPEATABLE READ + retry | 100 | 100 | 1033 | correct (**787** serialization failures absorbed) |
-| 7. count-then-`INSERT` | 113 | 113 | 154 | **OVERSOLD by 13** |
-| 8. pre-allocated seat rows | 100 | 100 | 216 | correct |
+| 1. no transaction | **192** | **15** | 251 | told 192 users yes, stored 15 |
+| 2. txn @ READ COMMITTED | **192** | **14** | 335 | *still* broken |
+| 3. `SELECT … FOR UPDATE` | 100 | 100 | 854 | correct |
+| 4. optimistic (version) | 100 | 100 | 1004 | correct |
+| 5. single atomic `UPDATE` | 100 | 100 | **203** | correct, fastest |
+| 6. REPEATABLE READ + retry | 100 | 100 | 1609 | correct (**805** serialization failures absorbed) |
+| 7. count-then-`INSERT` | 113 | 113 | 204 | **OVERSOLD by 13** |
+| 8. pre-allocated seat rows | 100 | 100 | 309 | correct |
+
+(The "stored" count for strategies 1–2 varies run to run — 13 to 15 across our runs —
+and the serialization-failure count is likewise a few hundred either side. The
+confirmed counts and the correct/incorrect verdicts do not vary.)
 
 ### One bug, two opposite symptoms
 
@@ -235,7 +251,7 @@ whichever failure they saw first:
 
 - **Counter model** (`UPDATE seats SET sold = <the value I read>`) — concurrent
   writers overwrite each other. Increments are **lost**, so you confirm 192
-  bookings and store 13. You **undersell** while telling customers yes.
+  bookings and store ~15. You **undersell** while telling customers yes.
 - **Insert model** (`SELECT count(*)` then `INSERT`) — every insert succeeds, so
   nothing is lost, but the count was already stale. You **oversell**.
 
@@ -250,7 +266,7 @@ does: a transaction, at the default isolation level. It is still wrong. READ
 COMMITTED prevents *dirty* reads; it does not prevent *lost updates*.
 *"We wrap it in a transaction"* is not an answer to *"is this correct?"*.
 
-**Strategy 6 has a hidden cost.** Those 787 serialization failures were aborted
+**Strategy 6 has a hidden cost.** Those 805 serialization failures were aborted
 transactions that our retry loop absorbed. Without the loop they are 500s. You
 swapped silent corruption for visible errors you now have to handle — usually
 the better trade, but a trade.

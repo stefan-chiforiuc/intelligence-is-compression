@@ -25,32 +25,41 @@ Before any of your work happens you pay for:
 That cost is roughly constant. Your work is proportional to N. So there is
 always a **crossover**.
 
-### The measured crossover (4-core Xeon)
+### The measured crossover (4 vCPUs, median of 5 runs)
 
 Cheap operation — one multiply-add per element:
 
 | elements | sequential | parallel | speedup | |
 | ---: | ---: | ---: | ---: | --- |
-| 1,000 | 0.047 ms | 0.134 ms | 0.35x | parallel LOSES |
-| 10,000 | 0.051 ms | 0.836 ms | **0.06x** | parallel LOSES badly |
-| 100,000 | 0.118 ms | 0.208 ms | 0.57x | parallel LOSES |
-| 1,000,000 | 1.18 ms | 1.00 ms | 1.18x | crossover |
-| 10,000,000 | 11.6 ms | 6.6 ms | 1.75x | parallel wins |
+| 1,000 | 0.106 ms | 0.300 ms | 0.35x | parallel LOSES |
+| 10,000 | 0.114 ms | 0.580 ms | **0.20x** | parallel LOSES badly |
+| 100,000 | 0.870 ms | 0.437 ms | 1.99x | **unstable**: 0.6x–11.8x across the 5 runs |
+| 1,000,000 | 1.15 ms | 1.71 ms | 0.67x | **unstable**: 0.7x–1.7x |
+| 10,000,000 | 3.66 ms | 1.77 ms | 2.08x | parallel wins |
+| 100,000,000 | 33.4 ms | 12.0 ms | 2.78x | parallel wins |
 
 Expensive operation — ~50 float iterations per element:
 
 | elements | sequential | parallel | speedup | |
 | ---: | ---: | ---: | ---: | --- |
-| 100 | 0.050 ms | 0.094 ms | 0.53x | parallel LOSES |
-| 1,000 | 0.078 ms | 0.309 ms | 0.25x | parallel LOSES |
-| 10,000 | 0.755 ms | 0.387 ms | 1.95x | crossover |
-| 100,000 | 8.30 ms | 2.40 ms | 3.47x | parallel wins |
-| 1,000,000 | 76.0 ms | 20.7 ms | 3.68x | parallel wins |
+| 100 | 0.053 ms | 0.117 ms | 0.45x | parallel LOSES |
+| 1,000 | 0.215 ms | 0.264 ms | 0.81x | parallel LOSES |
+| 10,000 | 1.08 ms | 0.551 ms | 1.95x | crossover (0.9x–2.0x across runs) |
+| 100,000 | 11.4 ms | 3.62 ms | 3.17x | parallel wins |
+| 1,000,000 | 108 ms | 28.8 ms | 3.73x | parallel wins |
 
 **Read the two tables together.** The crossover is *not* at a fixed element
-count — it is at a fixed amount of **total work**. Cheap work crosses over at
-~1,000,000 elements; expensive work crosses at ~10,000. That is a **100×
-difference** driven entirely by cost-per-element.
+count — it is at a fixed amount of **total work**. Cheap work only reliably wins
+from ~10,000,000 elements; expensive work crosses at ~10,000. That is a
+**100–1000× difference** driven entirely by cost-per-element.
+
+**Notice the instability in the cheap table.** The expensive table is clean and
+repeatable. The cheap one is not: at 100,000 elements the speedup ranged from
+0.6x to 11.8x across five runs, because the *sequential* baseline is a one-line
+loop whose speed depends on JIT state (warm-up, vectorisation) at the moment it
+is timed. That is a second lesson from the same table — a micro-measurement
+that small is mostly measuring the JIT. Measure the real operation in your real
+service, over a window long enough to be warm.
 
 > **The rule of thumb:**
 > `N × (cost per element)` must be **much greater than ~100 µs** of setup.
@@ -58,8 +67,11 @@ difference** driven entirely by cost-per-element.
 > If you cannot say roughly how long your operation takes, you cannot say
 > whether to parallelise it.
 
-At 10,000 cheap elements, `parallelStream()` was **16× slower**. That is the
-number to put on the slide.
+At 10,000 cheap elements, `parallelStream()` was **5× slower** (median of five
+runs; it ranged from 1.4× to 6.7× slower). That is the number to put on the
+slide — and it is smaller than the 16× this repo reported from its original
+reference machine, which is itself worth saying: a microbenchmark's headline
+factor moves with the machine, the JIT and the day. The direction never does.
 
 ### The `parallelStream()` traps
 
@@ -99,25 +111,25 @@ But the carrier pool has exactly as many threads as you have cores.
 **Experiment 1 — CPU-bound.** 8 arithmetic tasks:
 
 ```
-platform pool (4 threads) :  30.8 ms
-virtual thread per task   :  31.3 ms
--> 1.02x. No gain. Same cores, same work.
+platform pool (4 threads) :  46.0 ms
+virtual thread per task   :  45.7 ms
+-> 0.99x. No gain. Same cores, same work.
 ```
 
 **Experiment 2 — blocking I/O.** 10,000 tasks each blocking 50 ms:
 
 ```
-platform pool (200 threads):  2604.8 ms
-virtual thread per task    :   171.8 ms
--> 15.2x FASTER. This is what virtual threads are for.
+platform pool (200 threads):  2560.3 ms
+virtual thread per task    :   170.5 ms
+-> 15.0x FASTER. This is what virtual threads are for.
 ```
 
 **Experiment 3 — what a thread costs:**
 
 ```
-100,000 virtual  threads created in    69 ms, RSS +43 MB
-  2,000 platform threads created in   554 ms  (277 us each)
-  -> 100,000 platform threads would take ~28 s and ~100 GB of stack.
+100,000 virtual  threads created in   142 ms, RSS +60 MB
+  2,000 platform threads created in   670 ms  (335 us each)
+  -> 100,000 platform threads would take ~33 s and ~100 GB of stack.
      They would not fit.
 ```
 
@@ -181,11 +193,11 @@ That is the entire bug.
 
 | Implementation | expected | actual | ms | verdict |
 | --- | ---: | ---: | ---: | --- |
-| `ArrayList` (no sync) | 200,000 | 196,126 | 572 | **LOST 3,874 items** |
-| `ArrayList` + `synchronized` | 200,000 | 200,000 | 332 | correct |
-| `Collections.synchronizedList` | 200,000 | 200,000 | 288 | correct |
-| `CopyOnWriteArrayList` | 200,000 | 200,000 | **16,080** | correct but **56× slower** |
-| `ConcurrentLinkedQueue` | 200,000 | 200,000 | **143** | correct and fastest |
+| `ArrayList` (no sync) | 200,000 | 195,529 | 874 | **LOST 4,471 items** |
+| `ArrayList` + `synchronized` | 200,000 | 200,000 | 432 | correct |
+| `Collections.synchronizedList` | 200,000 | 200,000 | 285 | correct |
+| `CopyOnWriteArrayList` | 200,000 | 200,000 | **30,340** | correct but **106× slower** |
+| `ConcurrentLinkedQueue` | 200,000 | 200,000 | **178** | correct and fastest |
 
 Nothing crashed. The API returned `204` to every caller. Every one of those
 users believes their item was saved.
@@ -202,7 +214,7 @@ thread-safe collection" — is *wrong on its own*:
 | `CopyOnWriteArrayList` | yes | **O(n) per write → O(n²) to fill** | read-mostly: listeners, config |
 | `ConcurrentLinkedQueue` | yes | lock-free | append-only, which is most of the time |
 
-`CopyOnWriteArrayList` was 112× slower than `ConcurrentLinkedQueue` here. It is
+`CopyOnWriteArrayList` was 170× slower than `ConcurrentLinkedQueue` here. It is
 genuinely thread-safe and genuinely the wrong choice for a write-heavy
 endpoint. **Ask "thread-safe for what access pattern, at what cost?"**
 
@@ -242,8 +254,8 @@ The mechanism is `Send`/`Sync`: `Vec<String>` is `Send` but **not** `Sync`, so
 `Sync`. You cannot forget to **lock** (the data is inside the mutex) and you
 cannot forget to **unlock** (the guard drops, even on panic).
 
-Measured: `Arc<Mutex<Vec>>` completed the same 200,000 appends in **110 ms** —
-faster than Java's `synchronized` at 332 ms, despite using one global lock.
+Measured: `Arc<Mutex<Vec>>` completed the same 200,000 appends in **139 ms** —
+faster than Java's `synchronized` at 432 ms, despite using one global lock.
 
 ### The honest limits — state all three
 

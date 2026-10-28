@@ -13,7 +13,7 @@ says. **No machine code is ever produced for your code.**
 
 Every `a + b` goes through: fetch opcode → dispatch → unbox two `PyObject*` →
 look up `__add__` → allocate a result object → push it. That is dozens of
-machine instructions for one addition. This is why Python is ~35–46x slower on
+machine instructions for one addition. This is why Python is ~40x slower on
 tight loops, and no amount of clever coding closes that gap — you have to leave
 the interpreter (NumPy, Polars, a C extension).
 
@@ -21,7 +21,7 @@ CPython 3.11+ has a *specialising adaptive interpreter* (PEP 659) that rewrites
 hot bytecodes into type-specialised versions. It is a real 10–25% win, but it
 is not a compiler. CPython 3.13+ ships an experimental JIT.
 
-### JIT (JVM HotSpot, V8)
+### JIT (JVM HotSpot, .NET RyuJIT, V8)
 
 Start by interpreting. Count how often each method runs and each loop
 back-edges. When something is hot, **compile it to machine code while the
@@ -31,21 +31,25 @@ program runs**, using information only available at run time:
 - which branches are actually taken
 - which virtual calls are actually monomorphic (so they can be inlined)
 
-Both use **tiered compilation**:
+All three use **tiered compilation**:
 
-| | JVM | V8 |
-| --- | --- | --- |
-| Tier 0 | bytecode interpreter | Ignition (interpreter) |
-| Tier 1 | C1 (fast, lightly optimised) | Sparkplug (baseline) |
-| Tier 2 | — | Maglev (mid-tier) |
-| Tier 3 | C2 (slow, aggressive) | TurboFan (aggressive) |
+| | JVM | .NET | V8 |
+| --- | --- | --- | --- |
+| Tier 0 | bytecode interpreter | quick, unoptimised JIT (no interpreter) | Ignition (interpreter) |
+| Tier 1 | C1 (fast, lightly optimised) | — | Sparkplug (baseline) |
+| Tier 2 | — | — | Maglev (mid-tier) |
+| Tier 3 | C2 (slow, aggressive) | tier-1 JIT, fed by dynamic PGO | TurboFan (aggressive) |
+
+(.NET differs in one way worth naming: it never interprets. The first call of
+a method goes through a fast, unoptimised JIT; hot methods are re-JITted with
+profile data. Hot loops are promoted mid-flight via on-stack replacement.)
 
 The aggressive tier makes **speculative** optimisations: "this variable has
 always been an integer, so I will compile assuming it always is." If that ever
 turns out false, the code **deoptimises** — it bails back to the interpreter and
 recompiles. That is what a mid-run spike in the demo usually is.
 
-### AOT (Rust, Go)
+### AOT (Rust, C++, Go)
 
 Compile everything to machine code before shipping. What you run is what you
 built. No warm-up, no deopt, no compiler in the process.
@@ -62,34 +66,44 @@ Same function, run in batches, timed per batch inside one process (so process
 startup is excluded and only warm-up is visible):
 
 ```
-Rust      (AOT)  first batch  3.6 ms → steady  3.1 ms    flat  (1.2x)
-Go        (AOT)  first batch  3.6 ms → steady  3.2 ms    flat  (1.1x)
-Java      (JIT)  first batch  8.5 ms → steady  2.9 ms    2.9x faster as you watch
-TypeScript(JIT)  first batch  8.4 ms → steady  3.8 ms    2.3x faster as you watch
-Java -Xint       ────────────── steady 47.7 ms           16x slower (JIT disabled)
-Python    (int)  ────────────── steady 101.9 ms          35x slower (no JIT at all)
+Rust      (AOT)  first batch  4.6 ms → steady  4.6 ms    flat  (1.0x)
+C++       (AOT)  first batch  4.9 ms → steady  4.8 ms    flat  (1.0x)
+Go        (AOT)  first batch  5.1 ms → steady  5.1 ms    flat  (1.0x)
+C#        (JIT)  first batch  7.0 ms → steady  4.6 ms    1.5x faster as you watch
+Java      (JIT)  first batch 11.6 ms → steady  5.3 ms    2.2x faster as you watch
+TypeScript(JIT)  first batch 12.8 ms → steady  5.4 ms    2.4x faster as you watch
+Java -Xint       ────────────── steady 49.5 ms            9x slower than Java (JIT disabled)
+Python    (int)  ────────────── steady 181.0 ms          34x slower than Java (no JIT at all)
 ```
+
+(`docs/sample-output/jit-warmup.txt` has the full chart. "Steady" is the best
+of the last five batches.)
 
 ### Three conclusions, in order of how surprising they are
 
-**1. Java's steady state beat Rust's.** 2.9 ms vs 3.1 ms. This kills the
-folklore that "compiled is faster than JIT". A JIT has *more* information than
-an AOT compiler, and on a hot monomorphic loop it can use it. The JIT's problem
-is not its ceiling — it is **how long it takes to get there**.
+**1. The JIT languages end up where the AOT languages start.** C# reaches
+4.6 ms — a tie with Rust — and Java 5.3 ms, within 15%. A JIT has *more*
+information than an AOT compiler, and on a hot monomorphic loop it can use it.
+This kills the folklore that "compiled is faster than JIT" at steady state. The
+JIT's problem is not its ceiling — it is **how long it takes to get there**
+(C# needed 1.5x its first batch to settle, Java 2.2x).
 
-> Caveat to state honestly: this is one microbenchmark on one kernel. Across
-> the whole benchmark suite Rust and Go generally win, and Rust wins decisively
-> on memory. But "JIT can match or beat AOT in steady state" is true and worth
-> knowing.
+> Caveat to state honestly: this is one microbenchmark on one kernel, and it
+> does not reproduce the strongest version of the claim. On our original
+> reference machine Java's steady state *beat* Rust's (2.9 ms vs 3.1 ms); on
+> this one, three repeat runs put Rust at 4.5–4.7 ms and Java at 5.3–5.5 ms. A
+> 7% gap flipped sign when the hardware changed, so do not build an argument on
+> it. What survives is "within ~15%". Across the whole benchmark suite, Rust and
+> C++ generally win, and Rust wins decisively on memory.
 
-**2. `java -Xint` is 16x slower than `java`.** That gap *is* the JIT. Then point
-out: 16x is about the same as the Python gap — because it is the same gap, for
-the same reason. Python is roughly "Java with the JIT permanently off".
+**2. `java -Xint` is 9x slower than `java`.** That gap *is* the JIT. Python's
+gap to Java (34x) is larger, but it is the same kind of gap: Python is roughly
+"a slower interpreter with no JIT at all".
 
-**3. The AOT lines are flat, but not perfectly flat.** Rust and Go show ~1.1–1.2x
-on the first batch. That is not compilation — it is page faults, cold caches,
-and CPU frequency ramping. Worth naming: **not every improvement over time is a
-JIT.** It is also a nice lesson in benchmark scepticism.
+**3. The AOT lines are flat, but not perfectly flat.** Rust, C++ and Go show up
+to ~1.05x on the first batch. That is not compilation — it is page faults, cold
+caches, and CPU frequency ramping. Worth naming: **not every improvement over
+time is a JIT.** It is also a nice lesson in benchmark scepticism.
 
 ---
 
@@ -127,9 +141,10 @@ Rust supports PGO via `-Cprofile-generate` / `-Cprofile-use`.
 
 | Technique | Effect | Cost |
 | --- | --- | --- |
-| **CDS** (Java) | already on by default; worth ~31% of startup — see below | none, it is the default |
+| **CDS** (Java) | already on by default; worth ~37% of startup — see below | none, it is the default |
 | **AppCDS** (Java) | extends CDS to *your* classes; scales with class count | small build step; needs a JAR |
-| **GraalVM native-image** | ~46 ms → ~5 ms; AOT-compiles the JVM app | slow builds, reflection config, lower peak throughput |
+| **GraalVM native-image** | ~69 ms → ~5 ms; AOT-compiles the JVM app | slow builds, reflection config, lower peak throughput |
+| **ReadyToRun / Native AOT** (.NET) | ReadyToRun precompiles IL to cut JIT time; Native AOT removes the JIT and most of the runtime boot (~44 ms here) | larger binaries, restricted reflection (AOT) |
 | **CRaC / checkpoint-restore** | restore a warmed-up JVM from a snapshot | infrastructure complexity |
 | **Bundling** (Node) | often the biggest single Node win | trivial; do it always |
 | **Keep it warm** | eliminates the problem entirely | you pay for idle capacity |
@@ -142,9 +157,9 @@ pre-parsed into a memory-mappable image. It is already enabled — that is what
 worth is to turn it **off**:
 
 ```bash
-java              -cp build/java Hello 1     # 45.7 ms  (CDS on, the default)
-java -Xshare:off  -cp build/java Hello 1     # 66.2 ms  (CDS off)
-#                                            # => CDS is already saving ~31%
+java              -cp build/java Hello 1     # 75.4 ms  (CDS on, the default)
+java -Xshare:off  -cp build/java Hello 1     # 119.7 ms (CDS off)
+#                                            # => CDS is already saving ~37%
 ```
 
 **AppCDS** is the same trick applied to *your* application's classes. Two
@@ -178,19 +193,33 @@ are meeting in the middle, which is a good sign that neither strategy is simply
 
 Nobody puts this on the slide, but it dominates your day:
 
-| | Clean build of the benchmark programs |
-| --- | --- |
-| Go | very fast — designed around compilation speed |
-| Java | fast (`javac` does little optimisation; the JIT does it later) |
-| TypeScript | fast, and skippable — Node 22 strips types natively |
-| Rust | **slowest by a wide margin** — LLVM does at build time what a JIT does at run time |
-| Python | none |
+Measured on the 60-line `binarytrees` program, one source file, no dependencies
+(median of 3 builds):
 
-Rust's slow builds and fast binaries are the same fact viewed from two angles:
-**AOT moves work from every run to one build.** If you build once and run a
-billion times, that is a spectacular trade. If you are iterating every 30
-seconds, it is painful — and that pain is a legitimate input to a language
-decision, not a detail.
+| | Build of one benchmark program | Note |
+| --- | ---: | --- |
+| Go | 0.07 s | warm build cache; **5.9 s** with `-a`, rebuilding the standard library |
+| Rust | 0.26 s | `rustc -O` |
+| Java | 0.74 s | `javac` does little optimisation; the JIT does it later |
+| C++ | 1.45 s | `g++ -O2 -std=c++20`; most of it is parsing standard headers |
+| TypeScript | 1.59 s | `tsc` over the whole project; skippable, Node 22 strips types natively |
+| C# | 2.57 s | `dotnet build`; mostly MSBuild and restore, not the compiler |
+| Python | none | |
+
+**Do not read a ranking into this.** A single file with no dependencies tells
+you almost nothing about a real project, and it does *not* support the common
+claim that Rust builds are slow: `rustc -O` was the second-fastest here. That
+folklore is about large codebases — hundreds of crates, generics instantiated
+across them, LTO — which this repo does not contain, so we did not measure it.
+C++ has the same reputation for the same reason (headers and templates scale
+badly). The honest conclusion is "measure your own build", and the useful
+number is your **incremental** build, not a clean build of a toy.
+
+The trade underneath is real, though. Slow builds and fast binaries are the
+same fact viewed from two angles: **AOT moves work from every run to one
+build.** If you build once and run a billion times, that is a spectacular
+trade. If you are iterating every 30 seconds, it is painful — and that pain is
+a legitimate input to a language decision, not a detail.
 
 ---
 

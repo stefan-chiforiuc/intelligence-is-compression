@@ -29,6 +29,10 @@ import sys
 import tempfile
 import time
 
+# Keep the dotnet CLI quiet and offline-friendly; none of this affects timings.
+for _k in ("DOTNET_CLI_TELEMETRY_OPTOUT", "DOTNET_NOLOGO", "DOTNET_SKIP_FIRST_TIME_EXPERIENCE"):
+    os.environ.setdefault(_k, "1")
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUILD = os.path.join(ROOT, "build")
 # Relative on purpose: every child process is spawned with cwd=ROOT, and a
@@ -39,11 +43,13 @@ DATA_TRANSCRIPT = os.path.join("data", "transcript.txt")
 
 # Order matters: this is the order columns appear in the report, fastest
 # family first, so the story reads left to right during the session.
-ALL_LANGS = ["rust", "go", "java", "typescript", "python"]
+ALL_LANGS = ["rust", "cpp", "go", "csharp", "java", "typescript", "python"]
 
 LANG_LABEL = {
     "rust": "Rust",
+    "cpp": "C++",
     "go": "Go",
+    "csharp": "C#",
     "java": "Java",
     "typescript": "TypeScript",
     "python": "Python",
@@ -64,6 +70,33 @@ def build_path(*parts: str) -> str:
 # Each entry: build command (may be None) and run command factory.
 # `default_arg` is the size knob; keep it identical across languages.
 
+# .NET: one csproj per workload. Intermediate files go under build/ so the
+# source tree stays clean; the app is run as `dotnet <dll>`, which is how a
+# framework-dependent .NET service is really launched (and includes the host
+# startup cost that the cold-start workload is designed to expose).
+def cs_spec(workload: str, name: str) -> dict:
+    out = build_path("cs", workload)
+    return {
+        "build": ["dotnet", "build", bench_dir(workload, f"{name}.csproj"),
+                  "-c", "Release", "-o", out, "--nologo", "-v", "q",
+                  f"-p:BaseIntermediateOutputPath={build_path('obj', workload)}/"],
+        "run": ["dotnet", os.path.join(out, f"{name}.dll")],
+    }
+
+
+# C++: -O2 to match `rustc -O` (opt-level 2). -ffp-contract=off stops GCC from
+# fusing a*b+c into FMA under -march=native, which would round differently from
+# every other language and could change the Mandelbrot count.
+def cpp_spec(workload: str, src: str, exe: str, native: bool = True) -> dict:
+    flags = ["-O2", "-std=c++20"]
+    if native:
+        flags += ["-march=native", "-ffp-contract=off"]
+    return {
+        "build": ["g++", *flags, bench_dir(workload, src), "-o", build_path(exe)],
+        "run": [build_path(exe)],
+    }
+
+
 WORKLOADS: dict[str, dict] = {
     "mandelbrot": {
         "blurb": "CPU-bound float math, no allocation",
@@ -75,11 +108,13 @@ WORKLOADS: dict[str, dict] = {
                           "-o", build_path("mandelbrot_rs")],
                 "run": [build_path("mandelbrot_rs")],
             },
+            "cpp": cpp_spec("mandelbrot", "mandelbrot.cpp", "mandelbrot_cpp"),
             "go": {
                 "build": ["go", "build", "-o", build_path("mandelbrot_go"),
                           bench_dir("mandelbrot", "mandelbrot.go")],
                 "run": [build_path("mandelbrot_go")],
             },
+            "csharp": cs_spec("mandelbrot", "Mandelbrot"),
             "java": {
                 "build": ["javac", "-d", build_path("java"),
                           bench_dir("mandelbrot", "Mandelbrot.java")],
@@ -105,11 +140,13 @@ WORKLOADS: dict[str, dict] = {
                           "-o", build_path("binarytrees_rs")],
                 "run": [build_path("binarytrees_rs")],
             },
+            "cpp": cpp_spec("binarytrees", "binarytrees.cpp", "binarytrees_cpp"),
             "go": {
                 "build": ["go", "build", "-o", build_path("binarytrees_go"),
                           bench_dir("binarytrees", "binarytrees.go")],
                 "run": [build_path("binarytrees_go")],
             },
+            "csharp": cs_spec("binarytrees", "BinaryTrees"),
             "java": {
                 "build": ["javac", "-d", build_path("java"),
                           bench_dir("binarytrees", "BinaryTrees.java")],
@@ -135,11 +172,13 @@ WORKLOADS: dict[str, dict] = {
                           "-o", build_path("wordfreq_rs")],
                 "run": [build_path("wordfreq_rs")],
             },
+            "cpp": cpp_spec("wordfreq", "wordfreq.cpp", "wordfreq_cpp"),
             "go": {
                 "build": ["go", "build", "-o", build_path("wordfreq_go"),
                           bench_dir("wordfreq", "wordfreq.go")],
                 "run": [build_path("wordfreq_go")],
             },
+            "csharp": cs_spec("wordfreq", "WordFreq"),
             "java": {
                 "build": ["javac", "-d", build_path("java"),
                           bench_dir("wordfreq", "WordFreq.java")],
@@ -164,11 +203,13 @@ WORKLOADS: dict[str, dict] = {
                           "-o", build_path("hello_rs")],
                 "run": [build_path("hello_rs")],
             },
+            "cpp": cpp_spec("startup", "hello.cpp", "hello_cpp", native=False),
             "go": {
                 "build": ["go", "build", "-o", build_path("hello_go"),
                           bench_dir("startup", "hello.go")],
                 "run": [build_path("hello_go")],
             },
+            "csharp": cs_spec("startup", "Hello"),
             "java": {
                 "build": ["javac", "-d", build_path("java"),
                           bench_dir("startup", "Hello.java")],
@@ -338,13 +379,16 @@ def machine_info() -> dict:
     for lang, cmd in (
         ("go", ["go", "version"]),
         ("rust", ["rustc", "--version"]),
+        ("cpp", ["g++", "--version"]),
+        ("dotnet", ["dotnet", "--version"]),
         ("node", ["node", "--version"]),
         ("java", ["java", "-version"]),
     ):
         try:
             res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             out = (res.stdout or res.stderr).strip().splitlines()
-            info[f"{lang}_version"] = out[-1].strip() if out else "?"
+            first = lang == "cpp"   # g++ prints the version on its first line
+            info[f"{lang}_version"] = (out[0] if first else out[-1]).strip() if out else "?"
         except Exception:
             info[f"{lang}_version"] = "not found"
     return info
@@ -483,7 +527,9 @@ def write_markdown(results: dict, path: str, langs: list[str]) -> None:
         f"- CPU: {m.get('cpu_model', m.get('processor', '?'))} ({m.get('cpu_count')} cores)",
         f"- OS: {m.get('platform')}",
         f"- Rust: {m.get('rust_version')}",
+        f"- C++: {m.get('cpp_version')} (`-O2 -march=native`)",
         f"- Go: {m.get('go_version')}",
+        f"- .NET: {m.get('dotnet_version')}",
         f"- Java: {m.get('java_version')}",
         f"- Node: {m.get('node_version')}",
         f"- Python: {m.get('python')}",

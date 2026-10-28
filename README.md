@@ -33,9 +33,9 @@ measured benchmark suite behind every claim.
 Teaching materials and a **runnable benchmark suite** for a session on how to
 choose a programming language for a solution.
 
-The same four programs are implemented in **Python, Go, Rust, TypeScript and
-Java** (plus **Scala** and **Kotlin** for the tail-call block), measured on your
-own hardware, and used to argue one point:
+The same four programs are implemented in **Python, Go, Rust, C++, C#,
+TypeScript and Java** (plus **Scala** and **Kotlin** for the tail-call block),
+measured on your own hardware, and used to argue one point:
 
 > There is no fastest language. There are only workloads, and each language is
 > a different bet about which resource is scarce.
@@ -57,12 +57,12 @@ own hardware, and used to argue one point:
 ## Quick start
 
 ```bash
-make doctor      # check Python, Go, Rust, Node and Java are installed
+make doctor      # check Python, Go, Rust, C++, .NET, Node and Java are installed
 make setup       # install deps, generate the benchmark corpus  (~2 min)
 make jvm-langs   # fetch standalone Scala + Kotlin compilers    (~110 MB, once)
 make bench       # run the suite, write docs/RESULTS.md         (~2 min)
 make transcript  # real-English corpus: 154 3Blue1Brown transcripts (once)
-make verify      # smoke-test all nine demos end to end         (~8 min)
+make verify      # smoke-test all 14 demo checks end to end     (~5 min)
 ```
 
 Then run any block on its own:
@@ -76,7 +76,7 @@ make demo-null-safety # Java NPE vs Kotlin String?, plus Rust/TS/Python
 make demo-style       # fold vs reduce, pure functions vs OOP, Spring beans as FP
 make demo-memory      # stack vs heap, and what an object really costs
 make demo-gc          # garbage collectors compared by tail latency
-make demo-concurrency # parallel scaling + data races in all five languages
+make demo-concurrency # parallel scaling + data races in all seven languages
 make demo-parallel-cost # when NOT to parallelise; virtual threads
 make demo-api-race    # 20 users, one shared array, over real HTTP
 make demo-spring      # Spring Boot: real cold start + request thread pool
@@ -87,7 +87,8 @@ make bench-startup    # cold starts only
 make carbon           # energy and CO2e estimate
 ```
 
-**Requirements:** Python 3.11+, Go 1.21+, Rust 1.70+, Node 20+, JDK 17+.
+**Requirements:** Python 3.11+, Go 1.21+, Rust 1.70+, a C++20 compiler (g++ 11+ or
+clang 14+), .NET SDK 8+, Node 20+, JDK 17+.
 The database block additionally wants Docker and `pip install 'psycopg[binary]'`
 — without them it falls back to a simulation and says so.
 Everything else is stdlib. Two steps need the network, both one-off and both
@@ -114,40 +115,54 @@ byte-identical output**. A benchmark you have not verified is a rumour.
 
 ### Headline results
 
-From a 4-core Xeon @ 2.1 GHz — regenerate with `make bench`:
+From a 4-vCPU cloud container (Xeon @ 2.8 GHz), median of 11 runs — regenerate
+with `make bench`:
 
 | | mandelbrot | binarytrees | wordfreq | startup | peak RSS (trees) |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Rust | 57 ms | 318 ms | **226 ms** | **1.5 ms** | **14 MB** |
-| Go | **50 ms** | 464 ms | 299 ms | **1.5 ms** | 14 MB |
-| Java | 114 ms | 281 ms | 771 ms | 46 ms | 197 MB |
-| TypeScript | 86 ms | **240 ms** | 1290 ms | 29 ms | 98 MB |
-| Python | 2300 ms | 4350 ms | 895 ms | 11 ms | 20 MB |
+| Rust | **96 ms** | 520 ms | **394 ms** | 1.9 ms | **14.6 MB** |
+| C++ | 105 ms | 520 ms | 726 ms | **1.5 ms** | **14.6 MB** |
+| Go | 107 ms | 809 ms | 577 ms | 2.0 ms | 14.8 MB |
+| C# | 158 ms | 488 ms | 985 ms | 44 ms | 58.5 MB |
+| Java | 173 ms | **359 ms** | 1354 ms | 69 ms | 174 MB |
+| TypeScript | 145 ms | 456 ms | 1738 ms | 34 ms | 96.4 MB |
+| Python | 3855 ms | 6337 ms | 1184 ms | 18.5 ms | 21.1 MB |
 
-Six results that break the usual folklore:
+Results that break the usual folklore:
 
-- **Python beats Java and TypeScript at `wordfreq`** — the most realistic
-  workload — because `str.split` and `Counter` are C. You are benchmarking
-  libraries as much as languages.
-- **Java allocates faster than Rust** at `binarytrees`, using 14x the memory to
-  do it. Speed and footprint are different axes.
-- **Java's *steady state* beats Rust's** in the JIT demo (2.9 ms vs 3.1 ms). A
-  JIT knows things an AOT compiler cannot. Its problem is time-to-peak, not peak.
-- **`GOGC=off` is 4.6x slower**, not faster. "Less GC" ≠ "faster" — a compacting
+- **Python lands next to Java at `wordfreq`** (1184 vs 1354 ms) and beats
+  TypeScript (1738 ms) — the most realistic workload — because `str.split` and
+  `Counter` are C. You are benchmarking libraries as much as languages. The
+  Python/Java order is *not* stable: it flips between passes on the synthetic
+  corpus, and Java wins on real English
+  ([Block 0b](docs/11-the-data-is-the-workload.md)).
+- **C++ is not automatically faster than Go, or than Rust.** At `wordfreq`
+  C++ took 726 ms against Go's 577 ms and Rust's 394 ms: `std::unordered_map` is
+  a node-based table, and the standard library optimises for generality. Three
+  languages compiled straight to machine code, 1.8x apart. The *library* is the
+  benchmark.
+- **Java allocates faster than Rust and C++** at `binarytrees` (359 vs 520 ms),
+  using 12x the memory to do it (174 vs 14.6 MB). C# is also ahead of them
+  (488 ms). Speed and footprint are different axes.
+- **A JIT's steady state is within 20% of AOT.** In the warm-up demo C# (4.6 ms)
+  ties Rust (4.6 ms) and Java is 5.3 ms. (On the original reference machine Java
+  edged Rust, 2.9 vs 3.1 ms; a 7% gap did not survive a change of hardware.)
+  A JIT's problem is time-to-peak, not peak.
+- **`GOGC=off` is 1.9x slower**, not faster. "Less GC" ≠ "faster" — a compacting
   collector also buys you cache locality.
-- **Python threads scale to 0.94x on 4 cores** while Python *processes* reach
-  2.64x. That flat row is the GIL, and it is the single most surprising result
+- **Python threads scale to 0.92x on 4 cores** while Python *processes* reach
+  2.67x. That flat row is the GIL, and it is the single most surprising result
   in the concurrency block.
 - **The same function overflows the stack in Java and returns instantly in
   Scala and Kotlin** — same JVM, same bytecode format. `javap -c` shows why:
   `invokestatic` versus `goto`.
-- **`parallelStream()` was 16x SLOWER** on 10,000 cheap elements. Parallelism
-  has a fixed cost, and below the crossover you only pay it.
-- **Virtual threads: 15.2x faster on blocking I/O, 1.02x on CPU work.** They
+- **`parallelStream()` was ~5x SLOWER** on 10,000 cheap elements (median of 5
+  runs; 1.4–6.7x). Parallelism has a fixed cost, and below the crossover you only pay it.
+- **Virtual threads: 15.0x faster on blocking I/O, 0.99x on CPU work.** They
   make blocking cheap; they do not make computing faster.
-- **A 20-user API lost 3,874 of 200,000 items** into an `ArrayList` and returned
+- **A 20-user API lost 4,471 of 200,000 items** into an `ArrayList` and returned
   HTTP 204 every time. The Rust equivalent does not compile.
-- **A connection pool of 200 gave 0.38x the throughput of a pool of 8, for 70x
+- **A connection pool of 200 gave 0.39x the throughput of a pool of 8, for 63x
   the latency.** Bigger pools move the queue; they do not remove it.
 
 ---
@@ -158,7 +173,7 @@ Six results that break the usual folklore:
 AGENDA.md                  the session plan (3:00 core / 4:00 extended)
 Makefile                   every command you need
 
-benchmarks/                the same 4 programs in 5 languages
+benchmarks/                the same 4 programs in 7 languages
   mandelbrot/              CPU-bound float math
   binarytrees/             allocation + GC pressure
   wordfreq/                file I/O, strings, hash maps, sorting
@@ -171,11 +186,11 @@ demos/
   null-safety/             Java NPE vs Kotlin String? vs Rust Option<T>
   programming-style/       fold vs reduce, pure fns vs OOP, Spring beans as FP
   stack-heap/              Go escape analysis, stack limits
-    objsize/               measured bytes-per-object in all 5 languages
+    objsize/               measured bytes-per-object in all 7 languages
   gc/                      collectors compared by tail latency
   concurrency/
     parallel/              same Mandelbrot kernel fanned out across cores
-    races/                 the same shared counter, five ways to get it wrong
+    races/                 the same shared counter, seven ways to get it wrong
   java-parallel-cost/      the crossover point, and virtual threads
   api-race/                20 users + one ArrayList over real HTTP; Rust twin
   spring-boot/             a real framework: cold start and request thread pool
@@ -218,10 +233,11 @@ Worth reading before you quote any of these numbers, and worth telling the room:
 - **Median of N runs**, with warm-up runs discarded. Configurable via `--reps`.
 - **Peak RSS via `os.wait4`**, so it is the child process's own `ru_maxrss`, not
   a process-wide running maximum.
-- **Output is cross-checked** across all five languages for every workload.
+- **Output is cross-checked** across all seven languages for every workload.
 - **Each language is written idiomatically and reasonably optimised.** Python
-  uses `__slots__` and `Counter`; Rust borrows `&str` keys instead of allocating
-  `String`s. Benchmarking a strawman version of a language teaches nothing.
+  uses `__slots__` and `Counter`; Rust and C++ borrow `&str` / `string_view` keys
+  instead of allocating a `String` per word. Benchmarking a strawman version of a
+  language teaches nothing.
 - **Absolute numbers are machine-specific.** The ratios and the shape of the
   disagreement between workloads are the point.
 - **The corpus is part of the workload.** `wordfreq` ships with two inputs of

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Parallel scaling: the same Mandelbrot kernel, fanned out N ways, in 5 languages.
+"""Parallel scaling: the same Mandelbrot kernel, fanned out N ways, in 7 languages.
 
     python3 demos/concurrency/parallel/run.py
     python3 demos/concurrency/parallel/run.py --workers 1 2 4 8 --size 1000
@@ -13,7 +13,7 @@ default of 2000 is four times the work, which keeps the parallel region large
 enough that JVM warm-up and V8 isolate boot do not dominate the result.
 
 What the table shows:
-  * Go / Rust / Java  scale close to linearly - real threads on real cores
+  * Go / Rust / C++ / C# / Java  scale close to linearly - real threads on real cores
   * Python threads    scale to ~1.0x - the GIL serialises bytecode execution
   * Python processes  scale, but pay spawn + pickling overhead
   * Node workers      scale, but each worker boots a fresh V8 isolate
@@ -50,12 +50,27 @@ def build() -> dict[str, list[str]]:
     else:
         print(f"  rust build failed:\n{r.stderr[:500]}")
 
+    r = sh(["g++", "-O2", "-std=c++20", "-pthread", os.path.join(HERE, "parallel_mandelbrot.cpp"),
+            "-o", os.path.join(OUT, "pm_cpp")])
+    if r.returncode == 0:
+        targets["C++"] = [os.path.join(OUT, "pm_cpp")]
+    else:
+        print(f"  c++ build failed:\n{r.stderr[:500]}")
+
     r = sh(["go", "build", "-o", os.path.join(OUT, "pm_go"),
             os.path.join(HERE, "parallel_mandelbrot.go")])
     if r.returncode == 0:
         targets["Go"] = [os.path.join(OUT, "pm_go")]
     else:
         print(f"  go build failed:\n{r.stderr[:500]}")
+
+    r = sh(["dotnet", "build", os.path.join(HERE, "ParallelMandelbrot.csproj"), "-c", "Release",
+            "-o", os.path.join(OUT, "cs"), "--nologo", "-v", "q",
+            f"-p:BaseIntermediateOutputPath={os.path.join(ROOT, 'build', 'obj', 'parallel')}/"])
+    if r.returncode == 0:
+        targets["C#"] = ["dotnet", os.path.join(OUT, "cs", "ParallelMandelbrot.dll")]
+    else:
+        print(f"  dotnet build failed:\n{(r.stdout + r.stderr)[:500]}")
 
     r = sh(["javac", "-d", OUT, os.path.join(HERE, "ParallelMandelbrot.java")])
     if r.returncode == 0:
@@ -157,9 +172,10 @@ def main() -> None:
      result across address spaces. Great for coarse chunks, terrible for
      fine-grained work.
 
-  3. Go, Rust and Java scale near-linearly. Different mechanisms, same outcome:
-     goroutines on GOMAXPROCS threads, scoped OS threads, and a fixed thread
-     pool respectively.
+  3. Go, Rust, C++, C# and Java scale near-linearly. Different mechanisms, same
+     outcome: goroutines on GOMAXPROCS threads, scoped OS threads (Rust),
+     std::thread (C++, no compiler help with races), Tasks on the .NET
+     ThreadPool, and a fixed Java thread pool.
 
   4. Node scales via worker_threads, but each worker is a whole new V8 isolate
      (~30 ms, ~40 MB). Note that `async`/`await` would have given you 0x here -

@@ -6,14 +6,16 @@
 
 ## Machine
 
-- CPU: 11th Gen Intel(R) Core(TM) i7-11850H @ 2.50GHz (16 cores)
-- OS: Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39
-- Rust: rustc 1.97.1 (8bab26f4f 2026-07-14)
-- Go: go version go1.26.5 linux/amd64
-- Java: OpenJDK 64-Bit Server VM Temurin-25.0.4+7 (build 25.0.4+7-LTS, mixed mode, sharing)
-- Node: v24.16.0
-- Python: 3.12.3
-- Repetitions per cell: 5 (median reported)
+- CPU: Intel(R) Xeon(R) Processor @ 2.80GHz (4 cores)
+- OS: Linux-6.18.44-fc-v165-x86_64-with-glibc2.39
+- Rust: rustc 1.97.0 (2d8144b78 2026-07-07)
+- C++: g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0 (`-O2 -march=native`)
+- Go: go version go1.24.7 linux/amd64
+- .NET: 8.0.132
+- Java: OpenJDK 64-Bit Server VM (build 21.0.12.1+1-1-24.04.4-Ubuntu, mixed mode, sharing)
+- Node: v22.22.0
+- Python: 3.13.17
+- Repetitions per cell: 11 (median reported)
 
 ## mandelbrot
 
@@ -21,11 +23,13 @@ _CPU-bound float math, no allocation_ — argument `1000`
 
 | Language | Wall (median) | CPU | Peak RSS | vs fastest |
 | --- | ---: | ---: | ---: | ---: |
-| Rust | 83.0 ms | 82.8 ms | 14.6 MB | 1.0x |
-| Go | 86.9 ms | 88.0 ms | 14.6 MB | 1.0x |
-| Java | 119.5 ms | 130.2 ms | 40.4 MB | 1.4x |
-| TypeScript | 123.3 ms | 128.2 ms | 52.2 MB | 1.5x |
-| Python | 2.38 s | 2.38 s | 14.6 MB | 28.6x |
+| Rust | 96.4 ms | 92.7 ms | 14.6 MB | 1.0x |
+| C++ | 104.8 ms | 101.3 ms | 14.6 MB | 1.1x |
+| Go | 106.6 ms | 105.6 ms | 14.6 MB | 1.1x |
+| C# | 157.8 ms | 150.2 ms | 23.6 MB | 1.6x |
+| Java | 172.8 ms | 188.3 ms | 40.1 MB | 1.8x |
+| TypeScript | 145.2 ms | 146.3 ms | 50.2 MB | 1.5x |
+| Python | 3.86 s | 3.81 s | 14.6 MB | 40.0x |
 
 Output identical across languages: yes
 
@@ -35,11 +39,13 @@ _allocation + GC pressure, millions of tiny objects_ — argument `16`
 
 | Language | Wall (median) | CPU | Peak RSS | vs fastest |
 | --- | ---: | ---: | ---: | ---: |
-| Rust | 275.8 ms | 275.7 ms | 14.6 MB | 1.1x |
-| Go | 541.5 ms | 1.10 s | 14.6 MB | 2.2x |
-| Java | 242.3 ms | 311.1 ms | 193.9 MB | 1.0x |
-| TypeScript | 285.0 ms | 359.9 ms | 100.2 MB | 1.2x |
-| Python | 4.92 s | 4.93 s | 22.1 MB | 20.3x |
+| Rust | 519.6 ms | 514.6 ms | 14.6 MB | 1.4x |
+| C++ | 519.8 ms | 509.9 ms | 14.6 MB | 1.4x |
+| Go | 808.6 ms | 1.57 s | 14.8 MB | 2.3x |
+| C# | 487.9 ms | 476.6 ms | 58.5 MB | 1.4x |
+| Java | 358.7 ms | 413.1 ms | 174.2 MB | 1.0x |
+| TypeScript | 456.3 ms | 526.4 ms | 96.4 MB | 1.3x |
+| Python | 6.34 s | 6.22 s | 21.1 MB | 17.7x |
 
 Output identical across languages: yes
 
@@ -49,11 +55,13 @@ _file I/O, strings, hash map, sort - closest to real code_ — argument `data/wo
 
 | Language | Wall (median) | CPU | Peak RSS | vs fastest |
 | --- | ---: | ---: | ---: | ---: |
-| Rust | 155.6 ms | 155.3 ms | 28.2 MB | 1.0x |
-| Go | 246.7 ms | 322.9 ms | 97.0 MB | 1.6x |
-| Java | 634.1 ms | 915.6 ms | 223.2 MB | 4.1x |
-| TypeScript | 995.1 ms | 1.15 s | 317.2 MB | 6.4x |
-| Python | 582.7 ms | 582.3 ms | 214.0 MB | 3.7x |
+| Rust | 394.2 ms | 387.5 ms | 28.4 MB | 1.0x |
+| C++ | 726.2 ms | 711.8 ms | 33.3 MB | 1.8x |
+| Go | 577.3 ms | 758.7 ms | 96.8 MB | 1.5x |
+| C# | 984.5 ms | 961.3 ms | 118.0 MB | 2.5x |
+| Java | 1.35 s | 1.66 s | 235.9 MB | 3.4x |
+| TypeScript | 1.74 s | 1.98 s | 269.5 MB | 4.4x |
+| Python | 1.18 s | 1.16 s | 203.9 MB | 3.0x |
 
 Output identical across languages: yes
 
@@ -63,11 +71,13 @@ _cold start: process spawn + runtime boot, no real work_ — argument `21`
 
 | Language | Wall (median) | CPU | Peak RSS | vs fastest |
 | --- | ---: | ---: | ---: | ---: |
-| Rust | 1.3 ms | 1.1 ms | 14.6 MB | 1.0x |
-| Go | 2.8 ms | 3.2 ms | 14.6 MB | 2.1x |
-| Java | 42.9 ms | 54.6 ms | 40.2 MB | 32.7x |
-| TypeScript | 31.9 ms | 32.2 ms | 44.1 MB | 24.3x |
-| Python | 16.9 ms | 16.8 ms | 14.6 MB | 12.9x |
+| Rust | 1.9 ms | 1.8 ms | 14.6 MB | 1.2x |
+| C++ | 1.5 ms | 1.4 ms | 14.6 MB | 1.0x |
+| Go | 2.0 ms | 2.4 ms | 14.6 MB | 1.3x |
+| C# | 43.6 ms | 43.5 ms | 23.3 MB | 28.4x |
+| Java | 69.2 ms | 84.5 ms | 40.1 MB | 45.2x |
+| TypeScript | 33.9 ms | 34.2 ms | 42.8 MB | 22.1x |
+| Python | 18.5 ms | 18.0 ms | 14.6 MB | 12.1x |
 
 Output identical across languages: yes
 

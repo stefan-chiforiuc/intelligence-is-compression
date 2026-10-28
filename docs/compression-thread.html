@@ -361,15 +361,15 @@
       </p>
       <div class="tbl">
         <table>
-          <caption class="s-mut" style="text-align:left;padding-bottom:.6rem;color:var(--muted);font-family:var(--f-mono)">Same five languages, four workloads, four different winners</caption>
+          <caption class="s-mut" style="text-align:left;padding-bottom:.6rem;color:var(--muted);font-family:var(--f-mono)">Same seven languages, four workloads, four different winners</caption>
           <thead>
             <tr><th>Workload</th><th>Stresses</th><th>Fastest here</th></tr>
           </thead>
           <tbody>
-            <tr><td><code>mandelbrot</code></td><td>tight float loops, zero allocation</td><td class="yes">Go</td></tr>
-            <tr><td><code>binarytrees</code></td><td>millions of tiny objects, GC pressure</td><td class="yes">TypeScript</td></tr>
-            <tr><td><code>wordfreq</code></td><td>file I/O, strings, hash maps, sort</td><td class="yes">Rust, then Go, then <em>Python</em></td></tr>
-            <tr><td><code>startup</code></td><td>process spawn + runtime boot</td><td class="yes">Go / Rust, ~1.5 ms</td></tr>
+            <tr><td><code>mandelbrot</code></td><td>tight float loops, zero allocation</td><td class="yes">Rust</td></tr>
+            <tr><td><code>binarytrees</code></td><td>millions of tiny objects, GC pressure</td><td class="yes">Java</td></tr>
+            <tr><td><code>wordfreq</code></td><td>file I/O, strings, hash maps, sort</td><td class="yes">Rust, then Go, then C++ — with <em>Python</em> level with Java</td></tr>
+            <tr><td><code>startup</code></td><td>process spawn + runtime boot</td><td class="yes">C++ / Rust / Go, ~1.5–2 ms</td></tr>
           </tbody>
         </table>
       </div>
@@ -390,7 +390,7 @@
         procedure: the same algorithm in every language, wall time <em>and</em> CPU time
         <em>and</em> peak memory, the median of several runs rather than the average, the first
         warm-up run thrown away — and then the step almost nobody bothers with, which is
-        <strong>checking that all five programs produced byte-for-byte identical output</strong>.
+        <strong>checking that all seven programs produced byte-for-byte identical output</strong>.
       </p>
       <p>
         That last check is what makes the numbers worth arguing about. Without it you can’t
@@ -413,9 +413,9 @@
         <table>
           <thead><tr><th>Claim</th><th>Verdict</th></tr></thead>
           <tbody>
-            <tr><td>“Compiled languages are faster than JIT languages”</td><td><span class="no">Folklore.</span> Java’s steady state beat Rust, 2.9 ms vs 3.1 ms. The JIT’s problem is time-to-peak, not peak.</td></tr>
-            <tr><td>“Garbage collection makes a language slow”</td><td><span class="no">Folklore.</span> Java <em>allocated faster than Rust</em>. GC costs memory and tail latency, not throughput.</td></tr>
-            <tr><td>“Turning the GC off makes it faster”</td><td><span class="no">False.</span> <code>GOGC=off</code> was 4.6× <em>slower</em> — the heap sprawls out of cache.</td></tr>
+            <tr><td>“Compiled languages are faster than JIT languages”</td><td><span class="no">Folklore.</span> C# (JIT) tied Rust at 4.6 ms and Java was within 15%. The JIT’s problem is time-to-peak, not peak.</td></tr>
+            <tr><td>“Garbage collection makes a language slow”</td><td><span class="no">Folklore.</span> Java and C# <em>allocated faster than Rust and C++</em>. GC costs memory and tail latency, not throughput.</td></tr>
+            <tr><td>“Turning the GC off makes it faster”</td><td><span class="no">False.</span> <code>GOGC=off</code> was 1.9× <em>slower</em> — the heap sprawls out of cache.</td></tr>
             <tr><td>“TypeScript makes JavaScript type-safe at run time”</td><td><span class="no">False.</span> Types are erased; one line proves it.</td></tr>
             <tr><td>“Static types prevent bugs”</td><td><span class="yes">Real, but bounded.</span> They protect the inside of your program, not its boundary.</td></tr>
           </tbody>
@@ -717,16 +717,16 @@
         </div>
         <figcaption>
           Virtual threads make blocking cheap; they do not make computing faster. Measured:
-          <strong>15.2× faster</strong> on 10,000 blocking I/O tasks, <strong>1.02×</strong>
+          <strong>15.0× faster</strong> on 10,000 blocking I/O tasks, <strong>0.99×</strong>
           on CPU work — the same cores, the same arithmetic.
         </figcaption>
       </figure>
       <p>
         The flattest row in the whole suite is Python threads on four cores:
-        <strong>0.94×</strong> — very slightly <em>slower</em> than using one thread. That row
+        <strong>0.92×</strong> — very slightly <em>slower</em> than using one thread. That row
         is the GIL, which lets only one thread run Python code at a time, so extra threads take
         turns instead of running together. Python <em>processes</em> on the same machine reach
-        2.64×, because each process gets its own interpreter and its own GIL — paid for with
+        2.67×, because each process gets its own interpreter and its own GIL — paid for with
         startup cost and copying every argument and result between processes.
       </p>
       <p>
@@ -801,14 +801,14 @@
         </div>
         <figcaption>
           The crossover is not at a fixed element count — it is at a fixed amount of
-          <em>total work</em>. Cheap work crossed over near 1,000,000 elements; expensive work
-          crossed near 10,000. A <strong>100× difference</strong>, driven entirely by
+          <em>total work</em>. Cheap work only reliably won from about 10,000,000 elements; expensive work
+          crossed near 10,000. A <strong>100–1000× difference</strong>, driven entirely by
           cost-per-element.
         </figcaption>
       </figure>
       <p>
         At 10,000 cheap elements, <code>parallelStream()</code> measured
-        <strong>16× slower</strong> than the plain sequential version. That is the number worth
+        <strong>5× slower</strong> (median of five runs) than the plain sequential version. That is the number worth
         remembering — and the reason the rule is written in terms of total work rather than
         number of items.
       </p>
@@ -832,13 +832,13 @@
         thread. <code>ArrayList</code> is not thread-safe. That is the whole bug.
       </p>
       <p>
-        Twenty users, 200,000 appends over real HTTP: <strong>3,874 items vanished</strong>.
+        Twenty users, 200,000 appends over real HTTP: <strong>4,471 items vanished</strong>.
         Nothing threw. Nothing logged. The API returned <code>204 No Content</code> to every
         single caller, all of whom believe their item was saved.
       </p>
       <figure class="diagram">
         <div>
-          <svg viewBox="0 0 720 200" role="img" aria-label="Two paths for the same shared-mutable-state bug. In Java the program compiles, deploys, serves HTTP 204 to every caller and silently loses 3874 items in production. In Rust the equivalent program is rejected by the compiler before it can run.">
+          <svg viewBox="0 0 720 200" role="img" aria-label="Two paths for the same shared-mutable-state bug. In Java the program compiles, deploys, serves HTTP 204 to every caller and silently loses 4471 items in production. In Rust the equivalent program is rejected by the compiler before it can run.">
             <defs>
               <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
                 <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
@@ -858,7 +858,7 @@
               <text x="351" y="63" class="s-mut" text-anchor="middle">to every caller</text>
               <line x1="410" y1="51" x2="444" y2="51" class="s-line" marker-end="url(#ar)" stroke="var(--refute)"/>
               <rect x="448" y="26" width="180" height="50" class="s-box" stroke="var(--refute)"/>
-              <text x="538" y="46" class="s-ref" text-anchor="middle">3,874 items lost</text>
+              <text x="538" y="46" class="s-ref" text-anchor="middle">4,471 items lost</text>
               <text x="538" y="62" class="s-mut" text-anchor="middle">no exception, no log entry</text>
             </g>
             <text x="8" y="96" class="s-mut">you find out from a customer, weeks later</text>
@@ -880,7 +880,7 @@
         </div>
         <figcaption>
           Java has good answers too — <code>ConcurrentLinkedQueue</code> was both correct
-          <em>and</em> fastest here, at 143 ms. The difference is not capability, it is the
+          <em>and</em> fastest here, at 178 ms. The difference is not capability, it is the
           <strong>default</strong>: Java’s default is a data structure that quietly breaks.
         </figcaption>
       </figure>
@@ -921,9 +921,9 @@
       </p>
       <p>
         First, the framework. The <code>startup</code> benchmark measures a floor: a JVM that
-        loads one class, ~46 ms. Nobody ships that. A real Spring Boot app with four
-        endpoints, no security, no JPA, no Kafka and no service mesh took <strong>4,475 ms to
-        first 200</strong> — roughly <strong>97× the bare JVM</strong>. That number is what
+        loads one class, ~69 ms. Nobody ships that. A real Spring Boot app with four
+        endpoints, no security, no JPA, no Kafka and no service mesh took <strong>4,626 ms to
+        first 200</strong> — roughly <strong>67× the bare JVM</strong>. That number is what
         decides whether Lambda needs SnapStart, how long a rolling deploy takes, how fast an
         autoscaler can answer a spike, and what your Kubernetes <code>startupProbe</code>
         threshold has to be. Most teams have never measured it.
@@ -931,7 +931,7 @@
       <p>
         Second, the pool. Tomcat’s default of 200 request threads is a number almost nobody
         chose, and it is a hard ceiling on in-flight requests. Raising it from 10 to 200 buys
-        real throughput here — 96 r/s to 725 r/s — because those threads are sleeping, not
+        real throughput here — 96 r/s to 507 r/s — because those threads are sleeping, not
         computing. Which is exactly why the answer flips for CPU work, and exactly why the
         database block’s pool of 200 was a disaster:
       </p>
@@ -975,12 +975,12 @@
             <rect x="284" y="142" width="120" height="36" class="s-box" stroke="var(--accent)"/>
             <text x="344" y="164" class="s-acc" text-anchor="middle">database</text>
             <text x="344" y="212" class="s-mut" text-anchor="middle">same capacity as before</text>
-            <text x="420" y="156" class="s-ref">0.38× throughput</text>
-            <text x="420" y="172" class="s-ref">70× the p50 latency</text>
+            <text x="420" y="156" class="s-ref">0.39× throughput</text>
+            <text x="420" y="172" class="s-ref">64× the p50 latency</text>
           </svg>
         </div>
         <figcaption>
-          A pool of 200 bought <strong>0.38× the throughput for 70× the latency</strong>. And
+          A pool of 200 bought <strong>0.39× the throughput for 64× the latency</strong>. And
           virtual threads do not help: ten thousand of them reaching for a Hikari pool of ten
           have moved the queue, not removed it — <em>they will not make it eleven</em>.
         </figcaption>
@@ -1292,8 +1292,9 @@
     <p style="margin:0">
       The one-page version to keep on your desk is <b>docs/00-how-to-choose.md</b>. Every number
       here can be reproduced from the repo: <code>make bench</code> runs the benchmark suite,
-      <code>make verify</code> runs every demo. These figures came from a 4-core Xeon @ 2.1 GHz
-      — your own numbers will differ, but the shapes and the ratios hold.
+      <code>make verify</code> runs every demo. These figures came from a 4-vCPU cloud container (Xeon @ 2.8 GHz)
+      — your own numbers will differ; the shapes and the large ratios hold, but gaps under
+      10–15% do not.
     </p>
   </footer>
 

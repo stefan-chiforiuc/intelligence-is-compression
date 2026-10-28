@@ -4,7 +4,7 @@
   repo cannot make:
 
     1. What a real framework's cold start actually costs. `Hello.java` boots in
-       ~46 ms; nobody ships Hello.java. This is the honest number.
+       tens of milliseconds; nobody ships Hello.java. This is the honest number.
     2. What a request thread pool does under load, and what virtual threads
        change about it.
 

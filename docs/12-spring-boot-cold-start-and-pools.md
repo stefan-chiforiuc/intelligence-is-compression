@@ -10,27 +10,33 @@ ships.
 
 ## Part 1 — What a framework actually costs to start
 
-`benchmarks/startup/Hello.java` boots a JVM and loads one class: **46 ms**.
+`benchmarks/startup/Hello.java` boots a JVM and loads one class: **69 ms**.
 Nobody ships `Hello.java`.
 
-Measured on the same 4-core Xeon, median of 3, page cache warmed:
+Measured on the same 4-vCPU machine, median of 3, page cache warmed:
 
 | Configuration | Time to first HTTP 200 | Spring's own figure |
 | --- | ---: | ---: |
-| **Spring Boot, defaults** | **3819 ms** | 3.09 s |
-| `-XX:TieredStopAtLevel=1` | 3535 ms | 2.92 s |
-| `+ lazy initialisation` | 3392 ms | 2.75 s |
-| `-Xshare:off` (CDS disabled) | 3996 ms | 3.19 s |
+| **Spring Boot, defaults** | **4626 ms** | 3.75 s |
+| `-XX:TieredStopAtLevel=1` | 4354 ms | 3.65 s |
+| `+ lazy initialisation` | 4114 ms | 3.33 s |
+| `-Xshare:off` (CDS disabled) | 4771 ms | 3.88 s |
+
+(An earlier full run gave 4444 / 4212 / 4401 / 4695 ms: there, lazy
+initialisation was *not* faster than the `TieredStopAtLevel=1` row. Run-to-run
+noise is ~5%. The honest summary is that the three variants land within ~11% of
+the default, and that none is a game-changer on this machine.)
 
 Put next to the language table:
 
-| | Cold start | vs Go |
+| | Cold start | vs C++ / Rust / Go |
 | --- | ---: | ---: |
-| Go / Rust `hello` | 1.5 ms | 1× |
-| bare JVM `Hello.java` | 46 ms | 31× |
-| **Spring Boot (this app)** | **3819 ms** | **~2500×** |
+| C++ / Rust / Go `hello` | 1.5 ms | 1× |
+| bare .NET `Hello.cs` | 44 ms | 28× |
+| bare JVM `Hello.java` | 69 ms | 45× |
+| **Spring Boot (this app)** | **4626 ms** | **~3000×** |
 
-> **83× the bare JVM, and this app is tiny.** Four endpoints, no security, no
+> **67× the bare JVM, and this app is tiny.** Four endpoints, no security, no
 > JPA, no Kafka, no messaging, no service mesh. A real enterprise service is
 > routinely **15–60 seconds**.
 
@@ -41,7 +47,7 @@ itself the lesson — it is a number with direct consequences that nobody looks 
 
 ### What the number decides
 
-- **Serverless.** 3.8 s of cold start on a Lambda is not a tax, it is a
+- **Serverless.** 4.6 s of cold start on a Lambda is not a tax, it is a
   disqualification, unless you use SnapStart/CRaC or GraalVM native-image.
 - **Rolling deploys.** `startup × pods ÷ parallelism` = deploy duration =
   rollback time = how brave you feel deploying on a Friday.
@@ -74,10 +80,10 @@ i.e. what 95% of real endpoints do).
 
 | Configuration | Throughput | p50 | p99 | Serving thread |
 | --- | ---: | ---: | ---: | --- |
-| `threads.max=10` | **96 r/s** | **1036 ms** | 1052 ms | platform |
-| `threads.max=50` | 460 r/s | 206 ms | 231 ms | platform |
-| `threads.max=200` (default) | 689 r/s | 113 ms | 163 ms | platform |
-| **virtual threads** | **719 r/s** | 114 ms | **140 ms** | **virtual** |
+| `threads.max=10` | **96 r/s** | **1038 ms** | 1055 ms | platform |
+| `threads.max=50` | 442 r/s | 205 ms | 237 ms | platform |
+| `threads.max=200` (default) | 507 r/s | 130 ms | 198 ms | platform |
+| **virtual threads** | **610 r/s** | 121 ms | **166 ms** | **virtual** |
 
 ### 1. The pool is a hard ceiling, and it is predictable
 
@@ -90,7 +96,7 @@ Little's law: with `P` requests in flight each taking `S` seconds, throughput is
 ```
 
 **The arithmetic predicted the machine.** Everything past 10 concurrent
-requests waits in Tomcat's accept queue — which is why p50 is **1036 ms for a
+requests waits in Tomcat's accept queue — which is why p50 is **1038 ms for a
 100 ms endpoint**. Over 90% of that latency is queue time, and your endpoint
 timer will not show it. It looks fast in the application logs and slow to the
 user.
@@ -112,7 +118,7 @@ blocking is cheap. Note the *serving thread* column flips from `platform` to
 `virtual` — that is your proof it actually switched on, and `/whoami` shows it
 in one curl.
 
-The gain over a well-tuned 200-thread pool is modest here (719 vs 689 r/s).
+The gain over a well-tuned 200-thread pool is modest here (610 vs 507 r/s, +20%).
 **That is the honest result.** Virtual threads' win is not raw throughput at
 this scale — it is that you stop having to guess the number, and you keep
 scaling when concurrency goes to 10,000 where 10,000 platform threads would not
@@ -180,8 +186,8 @@ how often you pay it** — which is Block 2's execution-shape question again.
 
 1. Your service starts in 40 s and you run 30 pods with `maxSurge: 1`. How long
    is a deploy, and what does that do to your incident response?
-2. p50 is 1036 ms for an endpoint whose own timer says 100 ms. Where is the
-   other 936 ms, and why does your APM not show it? *(Queue time before the
+2. p50 is 1038 ms for an endpoint whose own timer says 100 ms. Where is the
+   other 938 ms, and why does your APM not show it? *(Queue time before the
    request was assigned a thread. Most instrumentation starts the clock at the
    controller.)*
 3. You enable virtual threads and throughput barely moves. Name two reasons.

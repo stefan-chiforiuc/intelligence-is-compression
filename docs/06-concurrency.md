@@ -27,7 +27,7 @@ The follow-up question that resolves almost every real design argument:
 
 ---
 
-## The five concurrency models
+## The seven concurrency models
 
 | | Unit | Scheduler | Shared memory? | CPU parallelism |
 | --- | --- | --- | --- | --- |
@@ -35,6 +35,8 @@ The follow-up question that resolves almost every real design argument:
 | **Node/TS** | event loop + `worker_threads` | libuv; workers are OS threads | **no** by default (separate isolates) | only via workers |
 | **Go** | goroutine (2 KB, growable) | Go runtime, M:N onto `GOMAXPROCS` | yes | yes |
 | **Java** | platform thread (~1 MB) / **virtual thread** (JDK 21) | OS / JVM scheduler | yes | yes |
+| **C#** | `Thread`, or a `Task` on the shared thread pool (`async`/`await`) | .NET thread pool (work-stealing, hill-climbing sizer) | yes | yes |
+| **C++** | `std::thread` / `std::jthread`; `std::async`; coroutines (C++20) | OS | yes, **unchecked: a race is undefined behaviour** | yes |
 | **Rust** | `std::thread`, or async tasks | OS / your chosen executor | yes, **checked by the compiler** | yes |
 
 ### What each one is really betting on
@@ -51,6 +53,13 @@ The follow-up question that resolves almost every real design argument:
 - **Java** bet on real OS threads and a rigorously specified memory model
   (JSR-133, 2004). Expensive threads forced the whole reactive/async ecosystem
   — which **virtual threads** (JDK 21) now largely make unnecessary.
+- **C#** bet on a runtime-managed thread pool plus `async`/`await` as syntax,
+  so that "wait for I/O without holding a thread" reads like straight-line
+  code. It is the same bet as Java's virtual threads, made earlier and in the
+  compiler rather than the scheduler.
+- **C++** bet that the programmer knows best. Threads, atomics and a precise
+  memory model (C++11) are all there, and none of it is checked: a data race is
+  *undefined behaviour*, so the compiler may assume it never happens.
 - **Rust** bet that the compiler should prove your sharing is sound. `Send` and
   `Sync` put "safe to move between threads" and "safe to share between threads"
   into the type system.
@@ -60,16 +69,24 @@ The follow-up question that resolves almost every real design argument:
 ## Part 1 — Can you use all your cores?
 
 The same Mandelbrot kernel from Block 0, fanned out across workers. Measured on
-a 4-core machine, `n=2000`:
+a 4-vCPU machine, `n=2000`:
 
 | Language | 1 worker | 2 workers | 4 workers | scaling |
 | --- | ---: | ---: | ---: | ---: |
-| Rust | 234 ms | 117 ms | 87 ms | **2.69x** |
-| Go | 245 ms | 126 ms | 113 ms | 2.18x |
-| Java | 308 ms | 167 ms | 150 ms | 2.05x |
-| TypeScript (workers) | 261 ms | 202 ms | 177 ms | 1.47x |
-| **Python (threads)** | 8718 ms | 9183 ms | 9307 ms | **0.94x** |
-| **Python (processes)** | 8840 ms | 4489 ms | 3353 ms | 2.64x |
+| Rust | 377 ms | 191 ms | 139 ms | **2.71x** |
+| C++ | 386 ms | 210 ms | 164 ms | 2.35x |
+| Go | 411 ms | 211 ms | 152 ms | 2.70x |
+| C# | 380 ms | 191 ms | 142 ms | 2.67x |
+| Java | 442 ms | 234 ms | 192 ms | 2.31x |
+| TypeScript (workers) | 380 ms | 251 ms | 227 ms | 1.67x |
+| **Python (threads)** | 15433 ms | 16891 ms | 16703 ms | **0.92x** |
+| **Python (processes)** | 15260 ms | 7783 ms | 5709 ms | 2.67x |
+
+(Four runs in total. Scaling stayed between 2.1x and 2.8x for Rust, C++, Go, C#
+and Java, and between 1.7x and 1.8x for TypeScript; Python threads sat at
+0.86–0.94x. The ordering *among* the first five swaps from run to run — do not
+rank them on this table. The gap down to TypeScript and the flat
+Python-threads row are stable.)
 
 ### The five things to point at
 
@@ -79,13 +96,15 @@ at once. Adding threads made it *slightly slower* (contention overhead with no
 benefit). This is the single most important fact about Python concurrency and it
 surprises nearly every junior.
 
-**2. Python processes DO scale**, 0.94x → 2.64x, because each process has its
+**2. Python processes DO scale**, 0.92x → 2.67x, because each process has its
 own interpreter and its own GIL. The price: process spawn cost, and every
 argument and result must be pickled and copied between address spaces. Great for
 coarse chunks; terrible for fine-grained work.
 
-**3. Nobody reaches 4.00x on 4 cores.** Memory bandwidth, the unparallelised
-setup, thread startup and a shared cloud VM all take a cut. **Amdahl's law is
+**3. Nobody reaches 4.00x on 4 cores.** Here the best is ~2.7x. Memory
+bandwidth, the unparallelised setup, thread startup and a shared cloud VM all
+take a cut — and this machine is a KVM guest whose four vCPUs are not dedicated
+cores, so do not expect a laptop to look the same. **Amdahl's law is
 not a suggestion:** if 10% of your program is serial, your ceiling is 10x no
 matter how many cores you buy.
 
@@ -109,12 +128,21 @@ Eight threads, each incrementing a shared counter 100,000 times. Expected
 
 | Language | Result | When you find out |
 | --- | --- | --- |
-| Go | 493,211 — **lost 306,789** | run time, and only if you run `-race` |
-| Java (plain) | 231,766 — lost 568,234 | run time, never automatically |
-| Java (**`volatile`**) | 282,105 — **still lost 517,895** | run time |
-| Node (SharedArrayBuffer) | 509,242 — lost 290,758 | run time |
+| Go | 379,659 — **lost 420,341** | run time, and only if you run `-race` |
+| Java (plain) | 340,369 — lost 459,631 | run time, never automatically |
+| Java (**`volatile`**) | 325,259 — **still lost 474,741** | run time |
+| C# (plain) | 604,277 — lost 195,723 | run time, never automatically |
+| C# (**`volatile`**) | 572,459 — **still lost 227,541** | run time |
+| C++ (`-O0`) | 366,562 — lost 433,438 | run time, with `-fsanitize=thread` |
+| C++ (`-O2`) | **800,000 — "correct"** | the bug is still there: undefined behaviour |
+| Node (SharedArrayBuffer) | 644,448 — lost 155,552 | run time |
 | Node (plain / single-thread) | 800,000 | no shared memory, no race |
 | **Rust** | **does not compile** | **compile time** |
+
+(One run of `make demo-races`. The racy counts are different every run, and —
+as the C++ `-O2` row shows — a racy build can even print the right answer. The
+only stable fact is that the locked and atomic versions are always exactly
+800,000.)
 
 ### `counter++` is never one operation
 
@@ -125,10 +153,28 @@ different wrong number every run.
 ### The `volatile` trap — worth a full minute
 
 Juniors reach for `volatile` constantly because it sounds like "make this
-thread-safe". The demo shows a `volatile` counter losing 517,895 increments.
+thread-safe". The demo shows a `volatile` counter losing 474,741 increments in Java and
+227,541 in C#.
 
 > `volatile` guarantees **visibility** (you will see other threads' writes).
 > It does not guarantee **atomicity** (read-modify-write is still three steps).
+
+### C++: the same bug is *undefined behaviour*
+
+Look at the two C++ rows. The **same source file**, built with `-O0` and with
+`-O2`, loses 433,438 increments in one build and **none** in the other. That is
+not luck in the scheduler. GCC at `-O2` rewrites each thread's 100,000-iteration
+loop into a single `add $100000, counter` — you can see it in
+`g++ -O2 -S` — which shrinks the race window to almost nothing.
+
+The C++ memory model says a data race on a non-atomic object is **undefined
+behaviour**, so the optimiser is entitled to assume it cannot happen, and
+anything that follows from that assumption is legal. "It passed at `-O2`" is
+therefore worth exactly nothing; compare Python's Experiment 1 below, which
+also comes out correct for the wrong reason. The tool is
+`g++ -fsanitize=thread` (ThreadSanitizer), C++'s counterpart to Go's `-race`:
+it finds the race at either optimisation level, and, like `-race`, it only
+finds races your tests actually execute.
 
 ### Rust: the concurrency twin of Block 1
 
@@ -136,7 +182,7 @@ thread-safe". The demo shows a `volatile` counter losing 517,895 increments.
 error[E0499]: cannot borrow `counter` as mutable more than once at a time
 ```
 
-This is exactly the shape of the typing demo. Four languages compile the broken
+This is exactly the shape of the typing demo. Six languages compile the broken
 program; one refuses. The mechanism is `Send` + `Sync` plus the borrow
 checker's "one mutable borrow XOR many shared borrows" rule, which makes
 unsynchronised shared mutation *unrepresentable*.

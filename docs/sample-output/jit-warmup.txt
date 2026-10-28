@@ -1,7 +1,9 @@
 Running warm-up curves (60 batches x 200 calls each) ...
 
   rust ...
+  cpp ...
   go ...
+  csharp ...
   java ...
   java-xint ...
   typescript ...
@@ -11,34 +13,42 @@ Running warm-up curves (60 batches x 200 calls each) ...
 PER-BATCH TIME  (each cell is one batch; taller = slower)
 ==============================================================================
 
-Rust      (AOT)  ▂▁▁▂▂▂▂▁▁▁▁▁▁▁▁▁▁▂▁ ▂   ▁▁▁▁     ▁  ▁▂▂▂▂▁▁▁▄▂▃▂▂▂█▂▃▂▂▂▂▂▂▃
-                 first batch      3.0 ms   steady state      3.0 ms   warm-up gain  0.99x
+Rust      (AOT)      █                                                  ▁    
+                 first batch      4.6 ms   steady state      4.6 ms   warm-up gain  1.01x
 
-Go        (AOT)  ▂▃▄▂▂▁▂▁▁▁▂ ▁▁▁▁▁▁ ▁   ▁▁ ▃  ▁ ▁▃▄▃█▃▂▁▁▄▅▁▂▁▁▁▂▁▁▁▁▁▁▁▁▂▁▂▂
-                 first batch      3.3 ms   steady state      3.2 ms   warm-up gain  1.02x
+C++       (AOT)                                       █ ▂                    
+                 first batch      4.9 ms   steady state      4.8 ms   warm-up gain  1.03x
+
+Go        (AOT)   ▁▁▁ ▁   ▄▁▁▁   ▁   ▂ ▁▁▂▁ ▁ ▁ ▁                    ▁ █  ▂▁ 
+                 first batch      5.1 ms   steady state      5.1 ms   warm-up gain  1.00x
+
+C#        (JIT)  ▂▂▂▁▂▁▁▁▁▂▂▃▁▁▁▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁      ▁▁        ▃▄█ ▁▁▁▁▁    
+                 first batch      7.0 ms   steady state      4.6 ms   warm-up gain  1.54x
 
 Java      (JIT)  █                                                           
-                 first batch      7.7 ms   steady state      3.7 ms   warm-up gain  2.08x
+                 first batch     11.6 ms   steady state      5.3 ms   warm-up gain  2.18x
 
-Java -Xint       ▆▇▇▆▆▇▆▆▆▆▆▆█▇▆▆▆▆▅▆▆▆▆▅▅▆▅▆▆▅▆▆▅                           
-                 first batch     48.1 ms   steady state     36.9 ms   warm-up gain  1.30x
+Java -Xint         ▁    ▃     ▄▁▂              ▂   ▁  ▁▁      ▅█▂▃  ▇▃   ▄▂▂ 
+                 first batch     50.3 ms   steady state     49.5 ms   warm-up gain  1.02x
 
-TypeScript(JIT)  █                                                           
-                 first batch      7.3 ms   steady state      3.0 ms   warm-up gain  2.45x
+TypeScript(JIT)  █  ▁ ▁                          ▁     ▂ ▁                   
+                 first batch     12.8 ms   steady state      5.4 ms   warm-up gain  2.38x
 
-Python    (int)  ▅  ▄  ▄ ▁▁▂▁  ▂  ▄ ▁      ▃▃█  ▁▃▃▃▄▁▁ ▂  ▁  ▁   ▁▁ ▂▁▁     
-                 first batch    140.8 ms   steady state    119.5 ms   warm-up gain  1.18x
+Python    (int)   ▁    ▁▂▁        ▃█▃    ▁▄▁▁▂           ▂▂     ▁     ▁ ▁    
+                 first batch    189.6 ms   steady state    181.0 ms   warm-up gain  1.05x
 
 ==============================================================================
 ABSOLUTE COMPARISON (steady state, lower is better)
 ==============================================================================
 
-TypeScript(JIT)  █      3.0 ms  (1.0x)
-Rust      (AOT)  █      3.0 ms  (1.0x)
-Go        (AOT)  █      3.2 ms  (1.1x)
-Java      (JIT)  █      3.7 ms  (1.2x)
-Java -Xint       ██████████████     36.9 ms  (12.4x)
-Python    (int)  ████████████████████████████████████████████████    119.5 ms  (40.2x)
+Rust      (AOT)  █      4.6 ms  (1.0x)
+C#        (JIT)  █      4.6 ms  (1.0x)
+C++       (AOT)  █      4.8 ms  (1.0x)
+Go        (AOT)  █      5.1 ms  (1.1x)
+Java      (JIT)  █      5.3 ms  (1.2x)
+TypeScript(JIT)  █      5.4 ms  (1.2x)
+Java -Xint       █████████████     49.5 ms  (10.8x)
+Python    (int)  ████████████████████████████████████████████████    181.0 ms  (39.7x)
 
 Talking points:
   * A flat line means the code was already optimal on the first run (AOT).

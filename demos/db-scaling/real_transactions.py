@@ -19,7 +19,7 @@ first, so this demo shows both:
                   Strategies 7-8.
 
 Both are catastrophic and neither raises an error. The counter model tells 192
-customers yes and stores 13. The insert model stores every one of the 192.
+customers yes and stores only ~15. The insert model stores every one of the 192.
 
 Eight strategies: the bug in two shapes, four correct answers, and one schema
 that makes the bad state unrepresentable.
@@ -319,7 +319,8 @@ WHAT THE ROOM SHOULD TAKE AWAY
 ==============================
 
   1. ONE BUG, TWO OPPOSITE SYMPTOMS.
-     Strategies 1-2 CONFIRM 192 bookings and STORE 13: concurrent writers
+     Strategies 1-2 CONFIRM 192 bookings and STORE only ~15 (it varies from
+     run to run - 13 to 15 in ours): concurrent writers
      overwrote each other and the increments were lost.
      Strategy 7 stores every booking and OVERSELLS: nothing was lost, but the
      count it checked against was already stale.

@@ -58,7 +58,7 @@ help:
 .PHONY: doctor
 doctor:
 	@echo "Checking toolchains ..."
-	@for t in $(PY) go rustc cargo node npx java javac; do \
+	@for t in $(PY) go rustc cargo g++ dotnet node npx java javac; do \
 		if command -v $$t >/dev/null 2>&1; then \
 			printf "  \033[32m ok \033[0m %-8s %s\n" "$$t" "$$(command -v $$t)"; \
 		else \
@@ -70,6 +70,8 @@ doctor:
 	@$(PY) --version 2>&1        | sed 's/^/  /'
 	@go version 2>/dev/null      | sed 's/^/  /' || echo "  go: missing"
 	@rustc --version 2>/dev/null | sed 's/^/  /' || echo "  rustc: missing"
+	@g++ --version 2>/dev/null | head -1 | sed 's/^/  /' || echo "  g++: missing"
+	@dotnet --version 2>/dev/null | sed 's/^/  dotnet /' || echo "  dotnet: missing"
 	@node --version 2>/dev/null  | sed 's/^/  node /' || echo "  node: missing"
 	@java -version 2>&1 | grep -v 'Picked up JAVA_TOOL_OPTIONS' | head -1 | sed 's/^/  /'
 
@@ -220,7 +222,7 @@ demo-api-race:
 	@bash demos/api-race/run.sh
 
 # --- Block 4d: Spring Boot --------------------------------------------------
-# A real framework, so the room sees what 46 ms of bare JVM turns into.
+# A real framework, so the room sees what a bare JVM's startup turns into.
 # First run downloads Spring dependencies from Maven Central (~25 MB jar).
 .PHONY: demo-spring
 demo-spring:
@@ -310,7 +312,7 @@ verify: setup jvm-langs
 	@bash demos/typing/run.sh --fast >/dev/null && echo "  ok"
 	@echo ""
 	@echo "=== 3/14 jit warm-up demo ======================================"
-	@$(PY) demos/jit-warmup/run.py --langs rust go java >/dev/null && echo "  ok"
+	@$(PY) demos/jit-warmup/run.py --langs rust cpp go csharp java >/dev/null && echo "  ok"
 	@echo ""
 	@echo "=== 4/14 tail-call demo (Java/Scala/Kotlin) ===================="
 	@bash demos/tail-calls/run.sh >/dev/null && echo "  ok"

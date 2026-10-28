@@ -16,8 +16,8 @@ differs is the vocabulary.
 | | Synthetic (`data/words.txt`) | Real English (`data/transcript.txt`) |
 | --- | --- | --- |
 | Source | a fixed-seed LCG in `tools/gen_words.py` | 154 **3Blue1Brown** video transcripts (2015–2024) |
-| Distinct words | **50,000** invented strings | **10,469** real English words |
-| Distribution | approximate Zipf (`u³`) | actual Zipf — `the` appears 29,448× |
+| Distinct words | **50,000-word** vocabulary of invented strings (49,979 drawn) | **10,469** real English words |
+| Distribution | approximate Zipf (`u³`) | actual Zipf — `the` appears 168,447× in the 3,000,000 words |
 | Sample | `tgxuzmz joxuhsf hwzineb` | `in my video on the circle division problem` |
 | Needs network | no | yes, once |
 
@@ -29,29 +29,44 @@ vocabulary.
 
 ## The measured result
 
-Median of 5 runs, two independent passes, 4-core Xeon:
+Median of 11 runs, one pass per corpus, 4-vCPU Xeon @ 2.8 GHz:
 
 | Language | Synthetic (50k vocab) | Real English (10.5k vocab) | Gain |
 | --- | ---: | ---: | ---: |
-| Rust | 168 ms | **126 ms** | 1.33× |
-| Go | 378 ms | **322 ms** | 1.17× |
-| Java | 660 ms | **436 ms** | **1.51×** |
-| Python | 644 ms | **486 ms** | 1.32× |
-| TypeScript | 1100 ms | **905 ms** | 1.22× |
+| Rust | 405 ms | **170 ms** | **2.38×** |
+| C++ | 594 ms | **261 ms** | 2.28× |
+| Go | 499 ms | **335 ms** | 1.49× |
+| C# | 827 ms | **502 ms** | 1.65× |
+| Java | 1131 ms | **625 ms** | 1.81× |
+| Python | 1240 ms | **729 ms** | 1.70× |
+| TypeScript | 1790 ms | **1428 ms** | 1.25× |
 
-### Three things to point at
+### Four things to point at
 
 **1. Every language got faster on the same amount of text.** Nothing about the
-programs changed. Fewer distinct keys means a smaller hash map, which means it
-fits in cache. **Vocabulary size mattered more than word count.**
+programs changed. Fewer distinct keys means a smaller hash map, and a smaller
+map is the likely reason — it fits in cache — though this repo does not measure
+cache misses, so call it a hypothesis. **Vocabulary size mattered more than word
+count.**
 
-**2. The gains are not equal, so the gaps move.** Java gained 1.51×, Go only
-1.17×. Any sentence of the form "language X is N× faster than Y at text
-processing" is incomplete until you say *on what text*.
+**2. The gains are not equal, so the gaps move.** Rust gained 2.38×,
+TypeScript only 1.25×. Any sentence of the form "language X is N× faster than Y
+at text processing" is incomplete until you say *on what text*: Rust's lead
+over TypeScript is 4.4× on the synthetic corpus and 8.4× on real English.
 
-**3. There is a rank change.** On the synthetic corpus Python (644 ms) **ties
-or beats Java** (660 ms). On real English, Java (436 ms) clearly beats Python
-(486 ms). Third and fourth place swap, purely because of the input data.
+**3. There is a rank change.** On the synthetic corpus **Go beats C++**
+(499 ms vs 594 ms). On real English **C++ beats Go** (261 ms vs 335 ms).
+Second and third place swap, purely because of the input data. It reproduced:
+the full-suite run of the synthetic corpus also had Go ahead (577 vs 726 ms),
+and a second pass over real English also had C++ ahead (273 vs 338 ms).
+
+**4. Be careful with the smaller gaps.** The same synthetic benchmark measured
+in two sessions (this table, and the Block 0 suite) differed by up to ~20% in
+the same program (C++: 594 ms vs 726 ms). Python and Java sit within ~10% of
+each other here — Java is ahead on both corpora in this table, while Python was
+ahead in the Block 0 suite run — so their order is *not* a finding. An earlier
+version of this page claimed a Python/Java swap; it did not reproduce, and the
+C++/Go swap is the one that did.
 
 > If a change of dataset can reorder your benchmark, then a benchmark without
 > its dataset is not a result. It is an anecdote with numbers attached.
@@ -133,9 +148,12 @@ then call back to it in Block 7.
 1. Why would a smaller vocabulary make *every* language faster? *(Smaller hash
    map, better cache locality, fewer distinct allocations, more branch
    predictability.)*
-2. Java gained 1.51× and Go only 1.17×. What might explain the difference?
-   *(Java's per-object overhead and GC pressure scale with the number of live
-   distinct keys, so it has more to gain when that number drops.)*
+2. Rust gained 2.38× and TypeScript only 1.25×. What might explain the
+   difference? *(A hypothesis, not a finding: the part of a run that vocabulary
+   can touch — hash-map size and sort length — is a bigger share of Rust's total
+   time than of TypeScript's, where costs that do not depend on vocabulary, such
+   as reading and slicing strings, dominate. A profile would confirm or refute
+   it; we have not taken one.)*
 3. Your team benchmarks a JSON parser with a 2 KB sample payload and picks the
    winner. What did they fail to test? *(Their real payload sizes, key
    cardinality, nesting depth, unicode. The 2 KB result may not survive any of

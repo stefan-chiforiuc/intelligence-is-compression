@@ -9,6 +9,9 @@ set -uo pipefail
 cd "$(dirname "$0")/../.."
 mkdir -p build/demos
 
+# Thousands separators; the shell's own printf ignores the grouping flag in the C locale.
+commas() { python3 -c 'import sys; print(f"{int(sys.argv[1]):,}")' "$1"; }
+
 printf '    %-14s %s\n' "ulimit -s:" "$(ulimit -s) KB (the OS main-thread stack limit)"
 echo
 
@@ -50,6 +53,66 @@ public class StackDepth {
 JAVA
 javac -d build/demos build/demos/StackDepth.java 2>/dev/null
 java -cp build/demos StackDepth 2>/dev/null | grep -v 'Picked up'
+
+# --- C++ --------------------------------------------------------------------
+# Overflow is a plain SIGSEGV. We install a handler on an alternate stack (the
+# normal one is exhausted, so the handler cannot run on it) purely so we can
+# report how deep we got. -O0 stops the compiler turning the recursion into a
+# loop, which at -O2 it happily does.
+cat > build/demos/stackdepth.cpp <<'CPP'
+#include <csignal>
+#include <cstdio>
+#include <unistd.h>
+static volatile unsigned long depth = 0;
+static void on_segv(int) {
+    char buf[32];
+    int n = snprintf(buf, sizeof buf, "%lu\n", depth);
+    write(1, buf, n);
+    _exit(0);
+}
+__attribute__((noinline)) static void f() { depth = depth + 1; f(); asm volatile(""); }
+int main() {
+    static char alt[65536];
+    stack_t ss{alt, 0, sizeof alt};
+    sigaltstack(&ss, nullptr);
+    struct sigaction sa{};
+    sa.sa_handler = on_segv;
+    sa.sa_flags = SA_ONSTACK;
+    sigaction(SIGSEGV, &sa, nullptr);
+    f();
+}
+CPP
+g++ -O0 build/demos/stackdepth.cpp -o build/demos/stackdepth_cpp
+cpp_depth=$(build/demos/stackdepth_cpp)
+printf '    %-14s %10s frames  (SIGSEGV - NOT catchable as an exception; process dies)\n' \
+  "C++" "$(commas "${cpp_depth:-0}")"
+
+# --- C# ---------------------------------------------------------------------
+# .NET cannot catch a StackOverflow either: the runtime prints the trace and
+# aborts. The trace collapses the repeated frame into "Repeat N times", which
+# is how we read the depth.
+mkdir -p build/demos/stackdepth_cs_src
+cat > build/demos/stackdepth_cs_src/StackDepth.csproj <<'CSPROJ'
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+</Project>
+CSPROJ
+cat > build/demos/stackdepth_cs_src/Program.cs <<'CS'
+static class P
+{
+    static int d;
+    static void F() { d++; F(); }
+    static void Main()
+    {
+        try { F(); } catch (System.Exception) { System.Console.WriteLine("caught"); }
+    }
+}
+CS
+dotnet build build/demos/stackdepth_cs_src/StackDepth.csproj -c Release -o build/demos/stackdepth_cs \
+  --nologo -v q -p:BaseIntermediateOutputPath="$PWD/build/obj/stackdepth/" >/dev/null 2>&1
+cs_depth=$(dotnet build/demos/stackdepth_cs/StackDepth.dll 2>&1 | grep -o 'Repeat [0-9]* times' | grep -o '[0-9]*')
+printf '    %-14s %10s frames  (fatal "Stack overflow." - NOT catchable; process aborts)\n' \
+  "C#" "$(commas "${cs_depth:-0}")"
 
 # --- Go ---------------------------------------------------------------------
 cat > build/demos/stackdepth.go <<'GO'
